@@ -24,7 +24,7 @@ curAllPatients <- PatientenV1
 enhanceData <- function(patients) {
   
   # Nur patienten mir Präventivmedikation
-  spalten <- grep("preventive_name_", names(patients), value=TRUE)
+  spalten <- grep("preventive_name_p", names(patients), value=TRUE)
   patients[, spalten] <- lapply(patients[,spalten], as.character)
   
   patients$birthyear <- as.numeric(patients$birthyear)
@@ -123,10 +123,10 @@ ggplot(enhancedPatients, aes(x = prophylaxeMed, fill=prophylaxeMed)) +
   scale_x_discrete(labels = c("TRUE" = "Ja", "FALSE" = "Nein"))+
   theme_minimal()
 
-## Visualisierung der Verteilung der Anzahlt an eingenommenen Prophylaxe Medikamente
+## Visualisierung der Verteilung der Anzahl an eingenommenen Prophylaxe Medikamente
 ggplot(enhancedPatients, aes(x = nProphylaxeMed)) +
   geom_histogram(binwidth = 1, fill = "steelblue", color = "white") +
-  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))+
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5),angle=90)+
   labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Anzahl Personen") +
   theme_minimal()
 
@@ -142,20 +142,20 @@ ggplot(enhancedPatients, aes(x=nProphylaxeMed)) +
   facet_wrap(~wechseljahre)+
   geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
   labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
-  geom_text(aes(label=after_stat(count)),stat = "count",hjust=-0.1,size=3.0, angle=90)+
+  geom_text(aes(label=after_stat(count)),stat = "count",position = position_stack(vjust = 0.5),size=3.0, angle=90)+
   theme_minimal()
 
 # Nach Geschlecht %
 ggplot(enhancedPatients, aes(x=nProphylaxeMed)) +
   facet_wrap(~gender)+
-  geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
+  geom_histogram(aes(y=after_stat(density)),binwidth = 1, fill = "steelblue", color = "white") +
   labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
   theme_minimal()
 
 # Nach Geschlecht absolut
 ggplot(enhancedPatients, aes(x=nProphylaxeMed),) +
-  facet_wrap(~gender, scales="free_x", dir="v")+
+  facet_wrap(~gender)+
   geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
   labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
-  geom_text(aes(label=after_stat(count)),stat = "count",hjust=-0.1,size=3.0, angle=90)+
+  geom_text(aes(label=after_stat(count)),stat = "count",position = position_stack(vjust = 0.5),size=3.0)+
   theme_minimal()
