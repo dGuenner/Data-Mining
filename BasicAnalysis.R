@@ -51,27 +51,111 @@ print(paste("Anzahl Patienten in Wechseljahren:", num_wechseljahre))
 library(ggplot2)
 
 ## Visualisierung der Altersverteilung
-ggplot(enhancedPatients, aes(x = alter)) +
-  geom_histogram(binwidth = 5, fill = "steelblue", color = "white") +
-  labs(title = "Altersverteilung", x = "Alter", y = "Anzahl Personen") +
+# binwidth 1
+ggplot(enhancedPatients, aes(x = alter, fill=wechseljahre)) +
+  geom_histogram(binwidth = 1, color = "white") +
+  scale_fill_manual(values= c("steelblue","darkgreen"))+
+  labs(title = "Altersverteilung", x = "Alter", y = "Anzahl Personen", fill="Wechseljahre") +
+  theme_minimal()
+
+# binwidth 5
+ggplot(enhancedPatients, aes(x = alter, fill=wechseljahre)) +
+  geom_histogram(binwidth = 5, color = "white") +
+  scale_fill_manual(values= c("steelblue","darkgreen"))+
+  labs(title = "Altersverteilung", x = "Alter", y = "Anzahl Personen", fill="Wechseljahre") +
+  geom_text(aes(label=after_stat(count)),stat = "bin",binwidth=5, color="black",position ="stack",vjust=-0.5, size=3.5)+
   theme_minimal()
 
 ## Visualisierung der Geschlechterverteilung
 ggplot(enhancedPatients, aes(x = gender)) +
   geom_bar(stat = "count", fill = "steelblue", color = "white") +
   labs(title = "Geschlechterverteilung", x = "Geschlecht", y = "Anzahl")+
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5), color="black")+
+  theme_minimal()
+
+## Visualisierung der Patienten in Wechseljahren
+ggplot(enhancedPatients, aes(x = wechseljahre)) +
+  geom_bar(stat = "count", fill = "steelblue", color = "white") +
+  labs(title = "Geschlechterverteilung", x = "Wechseljahre", y = "Anzahl")+
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5), color="black")+
+  scale_x_discrete(labels = c("FALSE" = "Nein", "TRUE" = "Ja"))+ 
+  theme_minimal()
+
+## Visualisierung der Anzahl an Patienten in Wechseljahren nach Geschlecht
+ggplot(enhancedPatients, aes(x = wechseljahre)) +
+  geom_bar(stat = "count", fill = "steelblue", color = "white") +
+  facet_wrap(~ gender) +
+  labs(title = "Verteilung von Wechseljahren nach Geschlecht",
+       x = "Wechseljahre",
+       y = "Anzahl") +
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5), color="black")+
+  scale_x_discrete(labels = c("FALSE" = "Nein", "TRUE" = "Ja"))+ 
   theme_minimal()
 
 ## Visualisierung der Einnahme von Prophylaxemedikamenten
 ggplot(enhancedPatients, aes(x = prophylaxeMed)) +
   geom_bar(stat = "count", fill = "steelblue", color = "white") +
-  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))+
   labs(title = "Verteilung Prophylaxemedikamente", x = "Nimmt Prophylaxemedikamente", y = "Anzahl")+
+  theme_minimal()
+
+# nach Wechelsjahren
+ggplot(enhancedPatients, aes(x = prophylaxeMed, fill=prophylaxeMed)) +
+  geom_bar(stat = "count", color = "white") +
+  scale_fill_manual(values= c("steelblue","darkgreen"))+
+  facet_wrap(~wechseljahre) +
+  labs(title = "Verteilung von Prophlaxemedikamenten nach Wechseljahren",
+       x = "Prophylaxemedikation",
+       y = "Anzahl") +
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))+
+  scale_x_discrete(labels = c("TRUE" = "Ja", "FALSE" = "Nein"))+
+  theme_minimal()
+
+# nach Geschlecht
+ggplot(enhancedPatients, aes(x = prophylaxeMed, fill=prophylaxeMed)) +
+  geom_bar(stat = "count", color = "white") +
+  scale_fill_manual(values= c("steelblue","darkgreen"))+
+  facet_wrap(~gender) +
+  labs(title = "Verteilung von Prophlaxemedikamenten nach Geschlecht",
+       x = "Prophylaxemedikation",
+       y = "Anzahl") +
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))+
+  scale_x_discrete(labels = c("TRUE" = "Ja", "FALSE" = "Nein"))+
   theme_minimal()
 
 ## Visualisierung der Verteilung der Anzahlt an eingenommenen Prophylaxe Medikamente
 ggplot(enhancedPatients, aes(x = nProphylaxeMed)) +
   geom_histogram(binwidth = 1, fill = "steelblue", color = "white") +
-  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))+
   labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Anzahl Personen") +
+  theme_minimal()
+
+# Nach Wechseljahren %
+ggplot(enhancedPatients, aes(x=nProphylaxeMed)) +
+  facet_wrap(~wechseljahre)+
+  geom_histogram(aes(y=after_stat(density)),binwidth = 1, fill = "steelblue", color = "white") +
+  labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
+  theme_minimal()
+
+# Nach Wechseljahren absolut
+ggplot(enhancedPatients, aes(x=nProphylaxeMed)) +
+  facet_wrap(~wechseljahre)+
+  geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
+  labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
+  geom_text(aes(label=after_stat(count)),stat = "count",hjust=-0.1,size=3.0, angle=90)+
+  theme_minimal()
+
+# Nach Geschlecht %
+ggplot(enhancedPatients, aes(x=nProphylaxeMed)) +
+  facet_wrap(~gender)+
+  geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
+  labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
+  theme_minimal()
+
+# Nach Geschlecht absolut
+ggplot(enhancedPatients, aes(x=nProphylaxeMed),) +
+  facet_wrap(~gender, scales="free_x", dir="v")+
+  geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
+  labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
+  geom_text(aes(label=after_stat(count)),stat = "count",hjust=-0.1,size=3.0, angle=90)+
   theme_minimal()
