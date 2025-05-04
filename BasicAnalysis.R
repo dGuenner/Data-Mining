@@ -43,10 +43,12 @@ curAllPatients <- PatientenV1
 #Methode zur Ausgabe der Patientenverteilung, welche Präventivmedikation einnehmen
 enhanceData <- function(patients) {
   prophylaxeMedNameColumns <- grep("preventive_name_p", names(patients), value=TRUE)
-  prophylaxeMedEffectColumns <- grep("effect_p", names(patients), value=TRUE)
-  
+  prophylaxeMedEffectColumns <- grep("effect_p", names(patients), value=TRUE) 
+  prophylaxeMedDosageColumns <- grep("dosage_p", names(patients), value=TRUE) 
+
   patients[, prophylaxeMedNameColumns] <- lapply(patients[,prophylaxeMedNameColumns], as.character)
   patients[, prophylaxeMedEffectColumns] <- lapply(patients[,prophylaxeMedEffectColumns], as.numeric)
+  patients[, prophylaxeMedDosageColumns] <- lapply(patients[,prophylaxeMedDosageColumns], as.numeric)
 
   patients$birthyear <- as.numeric(patients$birthyear)
   patients$alter <- 2025 - patients$birthyear
@@ -56,6 +58,13 @@ enhanceData <- function(patients) {
   
   # Durchschnitt der prophylaktischen Effekt-Werte (≠ 0)
   patients$avgProphylaxisEffect <- apply(patients[, prophylaxeMedEffectColumns], 1, function(x) {
+    x_nonzero <- x[x != 0 & !is.na(x)]
+    if (length(x_nonzero) == 0) return(NA)
+    mean(x_nonzero)
+  })
+
+  # Durchschnitt der prophylaktischen Dosage-Werte (≠ 0)
+  patients$avgProphylaxisDosage <- apply(patients[, prophylaxeMedDosageColumns], 1, function(x) {
     x_nonzero <- x[x != 0 & !is.na(x)]
     if (length(x_nonzero) == 0) return(NA)
     mean(x_nonzero)
@@ -209,6 +218,34 @@ avgEffectByAgeGroup <- enhancedPatients %>%
   )
 
 ggplot(avgEffectByAgeGroup, aes(x = ageGroup, y = meanEffect)) +
+  geom_col(fill = "darkgreen") +
+  geom_text(aes(label = round(meanEffect, 2)), vjust = -0.5) +
+  labs(title = "Durchschnittlicher Prophylaxe-Effekt pro Altersgruppe",
+       x = "Altersgruppe (Jahre)",
+       y = "Ø Prophylaxe-Effekt") +
+  theme_minimal()
+
+# Durschnitts Phrophylaxe Dosierung pro 10 Jahre Altersgruppe
+library(dplyr)
+
+enhancedPatients$ageGroup <- cut(
+  enhancedPatients$alter,
+  breaks = seq(0, max(enhancedPatients$alter, na.rm = TRUE) + 10, by = 10),
+  right = FALSE,
+  include.lowest = TRUE,
+  labels = paste(seq(0, max(enhancedPatients$alter, na.rm = TRUE), by = 10),
+                 seq(9, max(enhancedPatients$alter, na.rm = TRUE) + 9, by = 10),
+                 sep = "-")
+)
+
+avgDosageByAgeGroup <- enhancedPatients %>%
+  group_by(ageGroup) %>%
+  summarise(
+    meanEffect = mean(avgProphylaxisDosage, na.rm = TRUE),
+    count = n()
+  )
+
+ggplot(avgDosageByAgeGroup, aes(x = ageGroup, y = meanEffect)) +
   geom_col(fill = "darkgreen") +
   geom_text(aes(label = round(meanEffect, 2)), vjust = -0.5) +
   labs(title = "Durchschnittlicher Prophylaxe-Effekt pro Altersgruppe",
