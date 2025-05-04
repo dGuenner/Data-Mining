@@ -17,6 +17,26 @@ PatientenV15 <- read.csv("Daten\\PatientInnendaten mit Visiten-20250423\\Patient
 ## Ausgabe der Spalten der Patientendaten
 ncol(PatientenV1)
 
+output <- data.frame(
+  Nummer = seq_along(names(enhancedPatients)),
+  Spalte = names(enhancedPatients),
+  Beispielwert = sapply(enhancedPatients, function(col) {
+    # Umwandlung in character zur einheitlichen Prüfung
+    col_values <- as.character(col)
+    
+    # Filtere NA, "", und "0"
+    valid_values <- col_values[!is.na(col_values) & col_values != "" & col_values != "0"]
+    
+    if (length(valid_values) == 0) {
+      return(NA)
+    } else {
+      return(valid_values[1])
+    }
+  }),
+  row.names = NULL
+)
+write.csv(output, file = "Spaltenübersicht_mit_Beispielen.csv", row.names = FALSE)
+
 # Patientenliste
 curAllPatients <- PatientenV1
 
