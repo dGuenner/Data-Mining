@@ -96,7 +96,7 @@ ggplot(enhancedPatients, aes(x = gender)) +
 ## Visualisierung der Patienten in Wechseljahren
 ggplot(enhancedPatients, aes(x = wechseljahre)) +
   geom_bar(stat = "count", fill = "steelblue", color = "white") +
-  labs(title = "Geschlechterverteilung", x = "Wechseljahre", y = "Anzahl")+
+  labs(title = "Anzahl Patienten in Wechseljahre", x = "Wechseljahre", y = "Anzahl")+
   geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5), color="black")+
   scale_x_discrete(labels = c("FALSE" = "Nein", "TRUE" = "Ja"))+ 
   theme_minimal()
