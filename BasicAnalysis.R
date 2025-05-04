@@ -42,17 +42,25 @@ curAllPatients <- PatientenV1
 
 #Methode zur Ausgabe der Patientenverteilung, welche Präventivmedikation einnehmen
 enhanceData <- function(patients) {
+  prophylaxeMedNameColumns <- grep("preventive_name_p", names(patients), value=TRUE)
+  prophylaxeMedEffectColumns <- grep("effect_p", names(patients), value=TRUE)
   
-  # Nur patienten mir Präventivmedikation
-  spalten <- grep("preventive_name_p", names(patients), value=TRUE)
-  patients[, spalten] <- lapply(patients[,spalten], as.character)
-  
+  patients[, prophylaxeMedNameColumns] <- lapply(patients[,prophylaxeMedNameColumns], as.character)
+  patients[, prophylaxeMedEffectColumns] <- lapply(patients[,prophylaxeMedEffectColumns], as.numeric)
+
   patients$birthyear <- as.numeric(patients$birthyear)
   patients$alter <- 2025 - patients$birthyear
   patients$wechseljahre <- patients$alter <55 & patients$alter>45
-  patients$prophylaxeMed <- patients[spalten[1]] != '0'
-  patients$nProphylaxeMed <- rowSums(patients[,spalten] != '0')
+  patients$prophylaxeMed <- patients[prophylaxeMedNameColumns[1]] != '0'
+  patients$nProphylaxeMed <- rowSums(patients[,prophylaxeMedNameColumns] != '0')
   
+  # Durchschnitt der prophylaktischen Effekt-Werte (≠ 0)
+  patients$avgProphylaxisEffect <- apply(patients[, prophylaxeMedEffectColumns], 1, function(x) {
+    x_nonzero <- x[x != 0 & !is.na(x)]
+    if (length(x_nonzero) == 0) return(NA)
+    mean(x_nonzero)
+  })
+
   patients
 }
 
@@ -87,7 +95,7 @@ ggplot(enhancedPatients, aes(x = alter, fill=wechseljahre)) +
   theme_minimal()
 
 ## Visualisierung der Geschlechterverteilung
-ggplot(enhancedPatients, aes(x = gender)) +
+  ggplot(enhancedPatients, aes(x = gender)) +
   geom_bar(stat = "count", fill = "steelblue", color = "white") +
   labs(title = "Geschlechterverteilung", x = "Geschlecht", y = "Anzahl")+
   geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5), color="black")+
@@ -178,4 +186,32 @@ ggplot(enhancedPatients, aes(x=nProphylaxeMed),) +
   geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
   labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
   geom_text(aes(label=after_stat(count)),stat = "count",position = position_stack(vjust = 0.5),size=3.0)+
+  theme_minimal()
+
+# Durschnitts Phrophylaxe Effekt pro 10 Jahre Altersgruppe
+library(dplyr)
+
+enhancedPatients$ageGroup <- cut(
+  enhancedPatients$alter,
+  breaks = seq(0, max(enhancedPatients$alter, na.rm = TRUE) + 10, by = 10),
+  right = FALSE,
+  include.lowest = TRUE,
+  labels = paste(seq(0, max(enhancedPatients$alter, na.rm = TRUE), by = 10),
+                 seq(9, max(enhancedPatients$alter, na.rm = TRUE) + 9, by = 10),
+                 sep = "-")
+)
+
+avgEffectByAgeGroup <- enhancedPatients %>%
+  group_by(ageGroup) %>%
+  summarise(
+    meanEffect = mean(avgProphylaxisEffect, na.rm = TRUE),
+    count = n()
+  )
+
+ggplot(avgEffectByAgeGroup, aes(x = ageGroup, y = meanEffect)) +
+  geom_col(fill = "darkgreen") +
+  geom_text(aes(label = round(meanEffect, 2)), vjust = -0.5) +
+  labs(title = "Durchschnittlicher Prophylaxe-Effekt pro Altersgruppe",
+       x = "Altersgruppe (Jahre)",
+       y = "Ø Prophylaxe-Effekt") +
   theme_minimal()
