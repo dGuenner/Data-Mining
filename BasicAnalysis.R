@@ -43,6 +43,7 @@ curAllPatients <- PatientenV1
 #Methode zur Ausgabe der Patientenverteilung, welche Präventivmedikation einnehmen
 enhanceData <- function(patients) {
   prophylaxeMedNameColumns <- grep("preventive_name_p", names(patients), value=TRUE)
+  prophylaxeAbortedMedNameColumns <- grep("preventive_name_p", names(patients), value=TRUE)
   prophylaxeMedEffectColumns <- grep("effect_p", names(patients), value=TRUE) 
   prophylaxeMedDosageColumns <- grep("dosage_p", names(patients), value=TRUE) 
   prophylaxeMedTolerabilityColumns <- grep("tolerability_p", names(patients), value=TRUE) 
@@ -235,21 +236,89 @@ ggplot(avgEffectByAgeGroup, aes(x = ageGroup, y = meanEffect)) +
        y = "Ø Prophylaxe-Effekt") +
   theme_minimal()
 
+# Durchschnittliche Dosierung pro Wechseljahres-Gruppe berechnen
+avgEffectByMenopause <- enhancedPatients %>%
+  group_by(wechseljahre) %>%
+  summarise(
+    meanEffect = mean(avgProphylaxisEffect, na.rm = TRUE),
+    count = n()
+  )
+
+ggplot(avgEffectByMenopause, aes(x = as.factor(wechseljahre), y = meanEffect)) +
+  geom_col(fill = "darkgreen") +
+  geom_text(aes(label = meanEffect), vjust = -0.5) +
+  labs(title = "Durchschnittlicher Prophylaxe-Effekt nach Wechseljahresstatus",
+       x = "Wechseljahre (FALSE = Nein, TRUE = Ja)",
+       y = "Ø Prophylaxe-Effekt") +
+  theme_minimal()
+
+# Durschnitts Phrophylaxe Effekt pro Alter
+library(dplyr)
+
+avgEffectByAge <- enhancedPatients %>%
+  group_by(alter) %>%
+  summarise(
+    meanEffect = mean(avgProphylaxisEffect, na.rm = TRUE),
+    count = n()
+  )
+
+ggplot(avgEffectByAge, aes(x = alter, y = meanEffect)) +
+  geom_col(fill = "darkgreen") +
+  geom_text(aes(label = round(meanEffect, 2)), vjust = -0.5) +
+  labs(title = "Durchschnittliche Prophylaxe-Effekt pro Alter",
+       x = "Alter (Jahre)",
+       y = "Ø Prophylaxe-Effekt") +
+  theme_minimal()
+
 # Durschnitts Phrophylaxe Dosierung pro 10 Jahre Altersgruppe
 library(dplyr)
 
 avgDosageByAgeGroup <- enhancedPatients %>%
   group_by(ageGroup) %>%
   summarise(
-    meanEffect = mean(avgProphylaxisDosage, na.rm = TRUE),
+    meanDosage = mean(avgProphylaxisDosage, na.rm = TRUE),
     count = n()
   )
 
-ggplot(avgDosageByAgeGroup, aes(x = ageGroup, y = meanEffect)) +
+ggplot(avgDosageByAgeGroup, aes(x = ageGroup, y = meanDosage)) +
   geom_col(fill = "darkgreen") +
-  geom_text(aes(label = round(meanEffect, 2)), vjust = -0.5) +
+  geom_text(aes(label = round(meanDosage, 2)), vjust = -0.5) +
   labs(title = "Durchschnittliche Prophylaxe-Dosierung pro Altersgruppe",
        x = "Altersgruppe (Jahre)",
+       y = "Ø Prophylaxe-Dosierung") +
+  theme_minimal()
+
+# Durchschnittliche Dosierung pro Wechseljahres-Gruppe berechnen
+avgDosageByMenopause <- enhancedPatients %>%
+  group_by(wechseljahre) %>%
+  summarise(
+    meanDosage = mean(avgProphylaxisDosage, na.rm = TRUE),
+    count = n()
+  )
+
+ggplot(avgDosageByMenopause, aes(x = as.factor(wechseljahre), y = meanDosage)) +
+  geom_col(fill = "darkgreen") +
+  geom_text(aes(label = meanDosage), vjust = -0.5) +
+  labs(title = "Durchschnittliche Dosierung nach Wechseljahresstatus",
+       x = "Wechseljahre (FALSE = Nein, TRUE = Ja)",
+       y = "Ø Prophylaxe-Dosierung") +
+  theme_minimal()
+
+# Durschnitts Phrophylaxe Dosierung pro Alter
+library(dplyr)
+
+avgDosageByAge <- enhancedPatients %>%
+  group_by(alter) %>%
+  summarise(
+    meanDosage = mean(avgProphylaxisDosage, na.rm = TRUE),
+    count = n()
+  )
+
+ggplot(avgDosageByAge, aes(x = alter, y = meanDosage)) +
+  geom_col(fill = "darkgreen") +
+  geom_text(aes(label = round(meanDosage, 0)), vjust = -0.5) +
+  labs(title = "Durchschnittliche Prophylaxe-Dosierung pro Alter",
+       x = "Alter (Jahre)",
        y = "Ø Prophylaxe-Dosierung") +
   theme_minimal()
 
@@ -259,14 +328,48 @@ library(dplyr)
 avgTolerabilityByAgeGroup <- enhancedPatients %>%
   group_by(ageGroup) %>%
   summarise(
-    meanEffect = mean(avgProphylaxisTolerability, na.rm = TRUE),
+    meanTolerability = mean(avgProphylaxisTolerability, na.rm = TRUE),
     count = n()
   )
 
-ggplot(avgTolerabilityByAgeGroup, aes(x = ageGroup, y = meanEffect)) +
+ggplot(avgTolerabilityByAgeGroup, aes(x = ageGroup, y = meanTolerability)) +
   geom_col(fill = "darkgreen") +
-  geom_text(aes(label = round(meanEffect, 2)), vjust = -0.5) +
+  geom_text(aes(label = round(meanTolerability, 2)), vjust = -0.5) +
   labs(title = "Durchschnittlicher Prophylaxe-Tolerability-Wert pro Altersgruppe",
        x = "Altersgruppe (Jahre)",
+       y = "Ø Prophylaxe-Tolerability") +
+  theme_minimal()
+
+# Durchschnittliche Tolerability pro Wechseljahres-Gruppe berechnen
+avgTolerabilityByMenopause <- enhancedPatients %>%
+  group_by(wechseljahre) %>%
+  summarise(
+    meanTolerability = mean(avgProphylaxisTolerability, na.rm = TRUE),
+    count = n()
+  )
+
+ggplot(avgTolerabilityByMenopause, aes(x = as.factor(wechseljahre), y = meanTolerability)) +
+  geom_col(fill = "darkgreen") +
+  geom_text(aes(label = meanTolerability), vjust = -0.5) +
+  labs(title = "Durchschnittliche Tolerability nach Wechseljahresstatus",
+       x = "Wechseljahre (FALSE = Nein, TRUE = Ja)",
+       y = "Ø Prophylaxe-Tolerability") +
+  theme_minimal()
+
+# Durschnitts Phrophylaxe Tolerability pro Alter
+library(dplyr)
+
+avgTolerabilityByAge <- enhancedPatients %>%
+  group_by(alter) %>%
+  summarise(
+    meanTolerability = mean(avgProphylaxisEffect, na.rm = TRUE),
+    count = n()
+  )
+
+ggplot(avgTolerabilityByAge, aes(x = alter, y = meanTolerability)) +
+  geom_col(fill = "darkgreen") +
+  geom_text(aes(label = round(meanTolerability, 1)), vjust = -0.5) +
+  labs(title = "Durchschnittliche Prophylaxe-Tolerability pro Alter",
+       x = "Alter (Jahre)",
        y = "Ø Prophylaxe-Tolerability") +
   theme_minimal()
