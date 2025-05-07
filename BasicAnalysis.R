@@ -43,12 +43,13 @@ curAllPatients <- PatientenV1
 #Methode zur Ausgabe der Patientenverteilung, welche Präventivmedikation einnehmen
 enhanceData <- function(patients) {
   prophylaxeMedNameColumns <- grep("preventive_name_p", names(patients), value=TRUE)
-  prophylaxeAbortedMedNameColumns <- grep("preventive_name_p", names(patients), value=TRUE)
+  prophylaxeAbortedMedNameColumns <- grep("preventive_name_fp", names(patients), value=TRUE)
   prophylaxeMedEffectColumns <- grep("effect_p", names(patients), value=TRUE) 
   prophylaxeMedDosageColumns <- grep("dosage_p", names(patients), value=TRUE) 
   prophylaxeMedTolerabilityColumns <- grep("tolerability_p", names(patients), value=TRUE) 
 
   patients[, prophylaxeMedNameColumns] <- lapply(patients[,prophylaxeMedNameColumns], as.character)
+  patients[, prophylaxeAbortedMedNameColumns] <- lapply(patients[,prophylaxeAbortedMedNameColumns], as.character)
   patients[, prophylaxeMedEffectColumns] <- lapply(patients[,prophylaxeMedEffectColumns], as.numeric)
   patients[, prophylaxeMedDosageColumns] <- lapply(patients[,prophylaxeMedDosageColumns], as.numeric)
   patients[, prophylaxeMedTolerabilityColumns] <- lapply(patients[,prophylaxeMedTolerabilityColumns], as.numeric)
@@ -58,6 +59,8 @@ enhanceData <- function(patients) {
   patients$wechseljahre <- patients$alter <55 & patients$alter>45
   patients$prophylaxeMed <- patients[prophylaxeMedNameColumns[1]] != '0'
   patients$nProphylaxeMed <- rowSums(patients[,prophylaxeMedNameColumns] != '0')
+  patients$abortedProphylaxeMed <- patients[prophylaxeAbortedMedNameColumns[1]] != '0'
+  patients$nAbortedProphylaxeMed <- rowSums(patients[,prophylaxeAbortedMedNameColumns] != '0')
   
   # Durchschnitt der prophylaktischen Effekt-Werte (≠ 0)
   patients$avgProphylaxisEffect <- apply(patients[, prophylaxeMedEffectColumns], 1, function(x) {
@@ -207,7 +210,7 @@ ggplot(enhancedPatients, aes(x=nProphylaxeMed),) +
   geom_text(aes(label=after_stat(count)),stat = "count",position = position_stack(vjust = 0.5),size=3.0)+
   theme_minimal()
 
-#In 10er Altersgruppen aufteilen
+##In 10er Altersgruppen aufteilen
 enhancedPatients$ageGroup <- cut(
   enhancedPatients$alter,
   breaks = seq(0, max(enhancedPatients$alter, na.rm = TRUE) + 10, by = 10),
@@ -218,6 +221,7 @@ enhancedPatients$ageGroup <- cut(
                  sep = "-")
 )
 
+## Visualisierung der Prophylaxe Effekt
 # Durschnitts Phrophylaxe Effekt pro 10 Jahre Altersgruppe
 library(dplyr)
 
@@ -270,6 +274,7 @@ ggplot(avgEffectByAge, aes(x = alter, y = meanEffect)) +
        y = "Ø Prophylaxe-Effekt") +
   theme_minimal()
 
+## Visualisierung der Prophylaxe Dosierung
 # Durschnitts Phrophylaxe Dosierung pro 10 Jahre Altersgruppe
 library(dplyr)
 
@@ -322,7 +327,8 @@ ggplot(avgDosageByAge, aes(x = alter, y = meanDosage)) +
        y = "Ø Prophylaxe-Dosierung") +
   theme_minimal()
 
-# Durschnitts Phrophylaxe Tolerability pro 10 Jahre Altersgruppe
+## Visualisierung der Prophylaxe Tolerability
+# Durschnitts Prophylaxe Tolerability pro 10 Jahre Altersgruppe
 library(dplyr)
 
 avgTolerabilityByAgeGroup <- enhancedPatients %>%
@@ -372,4 +378,72 @@ ggplot(avgTolerabilityByAge, aes(x = alter, y = meanTolerability)) +
   labs(title = "Durchschnittliche Prophylaxe-Tolerability pro Alter",
        x = "Alter (Jahre)",
        y = "Ø Prophylaxe-Tolerability") +
+  theme_minimal()
+
+## Visualisierung ob Prophylaxemedikamenten abgesetzt
+ggplot(enhancedPatients, aes(x = abortedProphylaxeMed)) +
+  geom_bar(stat = "count", fill = "steelblue", color = "white") +
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))+
+  labs(title = "Verteilung abgesetzter Prophylaxemedikamente", x = "Prophylaxemedikamente abgesetzt", y = "Anzahl")+
+  theme_minimal()
+
+# nach Wechelsjahren
+ggplot(enhancedPatients, aes(x = abortedProphylaxeMed, fill=abortedProphylaxeMed)) +
+  geom_bar(stat = "count", color = "white") +
+  scale_fill_manual(values= c("steelblue","darkgreen"))+
+  facet_wrap(~wechseljahre) +
+  labs(title = "Verteilung von abgesetzten Prophlaxemedikamenten nach Wechseljahren",
+       x = "Prophylaxemedikation abgesetzt",
+       y = "Anzahl") +
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))+
+  scale_x_discrete(labels = c("TRUE" = "Ja", "FALSE" = "Nein"))+
+  theme_minimal()
+
+# nach Geschlecht
+ggplot(enhancedPatients, aes(x = abortedProphylaxeMed, fill=abortedProphylaxeMed)) +
+  geom_bar(stat = "count", color = "white") +
+  scale_fill_manual(values= c("steelblue","darkgreen"))+
+  facet_wrap(~gender) +
+  labs(title = "Verteilung von abgesetzten Prophlaxemedikamenten nach Geschlecht",
+       x = "Prophylaxemedikation abgesetzt",
+       y = "Anzahl") +
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5))+
+  scale_x_discrete(labels = c("TRUE" = "Ja", "FALSE" = "Nein"))+
+  theme_minimal()
+
+## Visualisierung der Verteilung der Anzahl an abgesetzten Prophylaxe Medikamente
+ggplot(enhancedPatients, aes(x = nAbortedProphylaxeMed)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "white") +
+  geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5),angle=90)+
+  labs(title = "Verteilung Anzahl abgesetzter Prophylaxemedikamente", x = "Anzahl abgesetzter Prophylaxe Medikamente", y = "Anzahl Personen") +
+  theme_minimal()
+
+# Nach Wechseljahren %
+ggplot(enhancedPatients, aes(x=nAbortedProphylaxeMed)) +
+  facet_wrap(~wechseljahre)+
+  geom_histogram(aes(y=after_stat(density)),binwidth = 1, fill = "steelblue", color = "white") +
+  labs(title = "Verteilung Anzahl abgesetzter Prophylaxemedikamente nach Wechseljahren", x = "Anzahl abgesetzter Prophylaxe Medikamente", y = "Prozent der Patienten") +
+  theme_minimal()
+
+# Nach Wechseljahren absolut
+ggplot(enhancedPatients, aes(x=nAbortedProphylaxeMed)) +
+  facet_wrap(~wechseljahre)+
+  geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
+  labs(title = "Verteilung Anzahl abgesetzter Prophylaxemedikamente nach Wecheljahren", x = "Anzahl abgesetzter Prophylaxe Medikamente", y = "Prozent der Patienten") +
+  geom_text(aes(label=after_stat(count)),stat = "count",position = position_stack(vjust = 0.5),size=3.0, angle=90)+
+  theme_minimal()
+
+# Nach Geschlecht %
+ggplot(enhancedPatients, aes(x=nAbortedProphylaxeMed)) +
+  facet_wrap(~gender)+
+  geom_histogram(aes(y=after_stat(density)),binwidth = 1, fill = "steelblue", color = "white") +
+  labs(title = "Verteilung Anzahl abgesetzter Prophylaxemedikamente nach Geschlecht", x = "Anzahl abgesetzter Prophylaxe Medikamente", y = "Prozent der Patienten") +
+  theme_minimal()
+
+# Nach Geschlecht absolut
+ggplot(enhancedPatients, aes(x=nAbortedProphylaxeMed),) +
+  facet_wrap(~gender)+
+  geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
+  labs(title = "Verteilung Anzahl abgesetzter Prophylaxemedikamente nach Geschlecht", x = "Anzahl abgesetzter Prophylaxe Medikamente", y = "Prozent der Patienten") +
+  geom_text(aes(label=after_stat(count)),stat = "count",position = position_stack(vjust = 0.5),size=3.0)+
   theme_minimal()
