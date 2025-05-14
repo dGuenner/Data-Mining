@@ -101,7 +101,7 @@ enhanceData <- function(patients) {
   patients[, prophylaxeMedTolerabilityColumns] <- lapply(patients[, prophylaxeMedTolerabilityColumns], as.numeric)
 
   patients$birthyear <- as.numeric(patients$birthyear)
-  patients$age <- as.numeric(format(as.Date(patients[, grep("^date_pc_K\\d{1,2}$", names(patients))]), "%Y")) - patients$birthyear
+  patients$age <- as.numeric(format(as.Date(patients[, grep("^date_dc_K\\d{1,2}$", names(patients))]), "%Y")) - patients$birthyear
   patients$menopause <- patients$age < 55 & patients$age > 45
   patients$prophylaxeMed <- patients[prophylaxeMedNameColumns[1]] != "0"
   patients$nProphylaxeMed <- rowSums(patients[, prophylaxeMedNameColumns] != "0")
