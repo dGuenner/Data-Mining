@@ -12,15 +12,17 @@
 # prophylaxisMedicationAmountDistributionByMenopauseAbsolute()
 # prophylaxisMedicationAmountDistributionByGenderRelativ()
 # prophylaxisMedicationAmountDistributionByGenderAbsolute()
-# avergaeProphylaxisEffectBy10YearAgeGroup()
-# avergaeProphylaxisEffectByMenopause()
-# avergaeProphylaxisEffectByAge()
-# avergaeProphylaxisDosageBy10YearAgeGroup()
-# avergaeProphylaxisDosageByMenopause()
-# avergaeProphylaxisDosageByAge()
-# avergaeProphylaxisTolerabilityBy10YearAgeGroup()
-# avergaeProphylaxisTolerabilityByMenopause()
-# avergaeProphylaxisTolerabilityByAge()
+# averageProphylaxisEffectBy10YearAgeGroup()
+# averageProphylaxisEffectByMenopause()
+# averageProphylaxisEffectByAge1()
+ averageProphylaxisEffectByAge2()
+# averageProphylaxisDosageBy10YearAgeGroup()
+# averageProphylaxisDosageByMenopause()
+# averageProphylaxisDosageByAge1()
+# averageProphylaxisDosageByAge2()
+# averageProphylaxisTolerabilityBy10YearAgeGroup()
+# averageProphylaxisTolerabilityByMenopause()
+# averageProphylaxisTolerabilityByAge()
 # abortedProphylaxisMedDistribution()
 # abortedProphylaxisMedDistributionByMenopause()
 # abortedProphylaxisMedDistributionByGender()
@@ -140,12 +142,12 @@ enhancedPatients <- enhanceData(curAllPatients)
 
 ## In 10er Altersgruppen aufteilen
 enhancedPatients$ageGroup10 <- cut(
-  enhancedPatients$alter,
-  breaks = seq(0, max(enhancedPatients$alter, na.rm = TRUE) + 10, by = 10),
+  enhancedPatients$age,
+  breaks = seq(0, max(enhancedPatients$age, na.rm = TRUE) + 10, by = 10),
   right = FALSE,
   include.lowest = TRUE,
-  labels = paste(seq(0, max(enhancedPatients$alter, na.rm = TRUE), by = 10),
-    seq(9, max(enhancedPatients$alter, na.rm = TRUE) + 9, by = 10),
+  labels = paste(seq(0, max(enhancedPatients$age, na.rm = TRUE), by = 10),
+    seq(9, max(enhancedPatients$age, na.rm = TRUE) + 9, by = 10),
     sep = "-"
   )
 )
@@ -295,7 +297,7 @@ prophylaxisMedicationAmountDistributionByGenderAbsolute <- function() {
 
 ## Visualisierung der Prophylaxe Effekt
 # Durschnitts Phrophylaxe Effekt pro 10 Jahre Altersgruppe
-avergaeProphylaxisEffectBy10YearAgeGroup <- function() {
+averageProphylaxisEffectBy10YearAgeGroup <- function() {
   avgEffectByAgeGroup <- enhancedPatients %>%
     group_by(ageGroup10) %>%
     summarise(
@@ -315,7 +317,7 @@ avergaeProphylaxisEffectBy10YearAgeGroup <- function() {
 }
 
 # Durchschnittliche Dosierung pro Wechseljahres-Gruppe berechnen
-avergaeProphylaxisEffectByMenopause <- function() {
+averageProphylaxisEffectByMenopause <- function() {
   avgEffectByMenopause <- enhancedPatients %>%
     group_by(menopause) %>%
     summarise(
@@ -334,8 +336,8 @@ avergaeProphylaxisEffectByMenopause <- function() {
     theme_minimal()
 }
 
-# Durschnitts Phrophylaxe Effekt pro Alter
-avergaeProphylaxisEffectByAge <- function() {
+# Durschnitts Phrophylaxe Effekt pro Alter 1
+averageProphylaxisEffectByAge1 <- function() {
   avgEffectByAge <- enhancedPatients %>%
     group_by(age) %>%
     summarise(
@@ -354,9 +356,32 @@ avergaeProphylaxisEffectByAge <- function() {
     theme_minimal()
 }
 
+# Durschnitts Phrophylaxe Effekt pro Alter Visualisierung 2
+averageProphylaxisEffectByAge2 <- function() {
+  avgEffectByAge <- enhancedPatients %>%
+    group_by(age) %>%
+    summarise(
+      meanEffect = mean(avgProphylaxisEffect, na.rm = TRUE),
+      count = n()
+    )
+
+  # Plot
+  ggplot() +
+    # Alle Datenpunkte als Punkte mit geringer Opazität
+    geom_point(data = enhancedPatients, aes(x = age, y = avgProphylaxisEffect), 
+              color = "darkgreen", alpha = 0.2) +
+    # Linie für Durchschnittswerte mit höherer Opazität
+    geom_line(data = avgEffectByAge, aes(x = age, y = meanEffect), 
+              color = "red", size = 1, alpha = 0.9) +
+    labs(title = "Durchschnittlicher Prophylaxe-Effektpro Alter",
+        x = "Alter (Jahre)",
+        y = "Ø Prophylaxe-Effekt") +
+    theme_minimal()
+}
+
 ## Visualisierung der Prophylaxe Dosierung
 # Durschnitts Phrophylaxe Dosierung pro 10 Jahre Altersgruppe
-avergaeProphylaxisDosageBy10YearAgeGroup <- function() {
+averageProphylaxisDosageBy10YearAgeGroup <- function() {
   avgDosageByAgeGroup <- enhancedPatients %>%
     group_by(ageGroup10) %>%
     summarise(
@@ -376,7 +401,7 @@ avergaeProphylaxisDosageBy10YearAgeGroup <- function() {
 }
 
 # Durchschnittliche Dosierung pro Wechseljahres-Gruppe berechnen
-avergaeProphylaxisDosageByMenopause <- function() {
+averageProphylaxisDosageByMenopause <- function() {
   avgDosageByMenopause <- enhancedPatients %>%
     group_by(menopause) %>%
     summarise(
@@ -395,8 +420,8 @@ avergaeProphylaxisDosageByMenopause <- function() {
     theme_minimal()
 }
 
-# Durschnitts Phrophylaxe Dosierung pro Alter
-avergaeProphylaxisDosageByAge <- function() {
+# Durschnitts Phrophylaxe Dosierung pro Alter 1
+averageProphylaxisDosageByAge1 <- function() {
   avgDosageByAge <- enhancedPatients %>%
     group_by(age) %>%
     summarise(
@@ -415,9 +440,32 @@ avergaeProphylaxisDosageByAge <- function() {
     theme_minimal()
 }
 
+# Durschnitts Phrophylaxe Dosierung pro Alter Visualisierung 2
+averageProphylaxisDosageByAge2 <- function() {
+  avgDosageByAge <- enhancedPatients %>%
+    group_by(age) %>%
+    summarise(
+      meanDosage = mean(avgProphylaxisDosage, na.rm = TRUE),
+      count = n()
+    )
+
+  # Plot
+  ggplot() +
+    # Alle Datenpunkte als Punkte mit geringer Opazität
+    geom_point(data = enhancedPatients, aes(x = age, y = avgProphylaxisDosage), 
+              color = "darkgreen", alpha = 0.2) +
+    # Linie für Durchschnittswerte mit höherer Opazität
+    geom_line(data = avgDosageByAge, aes(x = age, y = meanDosage), 
+              color = "red", size = 1, alpha = 0.9) +
+    labs(title = "Durchschnittliche Prophylaxe-Dosierung pro Alter",
+        x = "Alter (Jahre)",
+        y = "Ø Prophylaxe-Dosierung") +
+    theme_minimal()
+}
+
 ## Visualisierung der Prophylaxe Tolerability
 # Durschnitts Prophylaxe Tolerability pro 10 Jahre Altersgruppe
-avergaeProphylaxisTolerabilityBy10YearAgeGroup <- function() {
+averageProphylaxisTolerabilityBy10YearAgeGroup <- function() {
   avgTolerabilityByAgeGroup <- enhancedPatients %>%
     group_by(ageGroup10) %>%
     summarise(
@@ -437,7 +485,7 @@ avergaeProphylaxisTolerabilityBy10YearAgeGroup <- function() {
 }
 
 # Durchschnittliche Tolerability pro Wechseljahres-Gruppe berechnen
-avergaeProphylaxisTolerabilityByMenopause <- function() {
+averageProphylaxisTolerabilityByMenopause <- function() {
   avgTolerabilityByMenopause <- enhancedPatients %>%
     group_by(menopause) %>%
     summarise(
@@ -457,7 +505,7 @@ avergaeProphylaxisTolerabilityByMenopause <- function() {
 }
 
 # Durschnitts Phrophylaxe Tolerability pro Alter
-avergaeProphylaxisTolerabilityByAge <- function() {
+averageProphylaxisTolerabilityByAge <- function() {
   avgTolerabilityByAge <- enhancedPatients %>%
     group_by(age) %>%
     summarise(
