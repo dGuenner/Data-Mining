@@ -38,7 +38,7 @@ output <- data.frame(
 write.csv(output, file = "Spaltenübersicht_mit_Beispielen.csv", row.names = FALSE)
 
 # Patientenliste
-curAllPatients <- PatientenV1
+curAllPatients <- PatientenV15
 
 #Methode zur Ausgabe der Patientenverteilung, welche Präventivmedikation einnehmen
 enhanceData <- function(patients) {
@@ -55,8 +55,8 @@ enhanceData <- function(patients) {
   patients[, prophylaxeMedTolerabilityColumns] <- lapply(patients[,prophylaxeMedTolerabilityColumns], as.numeric)
 
   patients$birthyear <- as.numeric(patients$birthyear)
-  patients$alter <- 2025 - patients$birthyear
-  patients$wechseljahre <- patients$alter <55 & patients$alter>45
+  patients$age <- as.numeric(format(as.Date(patients[, grep("^date_pc_K\\d{1,2}$", names(patients))]), "%Y")) - patients$birthyear
+  patients$menopause <- patients$age <55 & patients$age>45
   patients$prophylaxeMed <- patients[prophylaxeMedNameColumns[1]] != '0'
   patients$nProphylaxeMed <- rowSums(patients[,prophylaxeMedNameColumns] != '0')
   patients$abortedProphylaxeMed <- patients[prophylaxeAbortedMedNameColumns[1]] != '0'
@@ -90,26 +90,26 @@ enhancedPatients <- enhanceData(curAllPatients)
 
 num_male_patients <- sum(enhancedPatients$gender == "männlich")
 num_female_patients <- sum(enhancedPatients$gender == "weiblich")
-num_wechseljahre <- sum(enhancedPatients$wechseljahre == TRUE)
+num_menopause <- sum(enhancedPatients$menopause == TRUE)
 
 print(paste("Gesamtanzahl Patienten in Visite:", nrow(enhancedPatients)))
 print(paste("Anzahl männliche Patienten in Visite:",num_male_patients))
 print(paste("Anzahl weibliche Patienten in Visite:",num_female_patients))
-print(paste("Anzahl Patienten in Wechseljahren:", num_wechseljahre))
+print(paste("Anzahl Patienten in Wechseljahren:", num_menopause))
 
 ## Visualisierung der Daten
 library(ggplot2)
 
 ## Visualisierung der Altersverteilung
 # binwidth 1
-ggplot(enhancedPatients, aes(x = alter, fill=wechseljahre)) +
+ggplot(enhancedPatients, aes(x = age, fill=menopause)) +
   geom_histogram(binwidth = 1, color = "white") +
   scale_fill_manual(values= c("steelblue","darkgreen"))+
   labs(title = "Altersverteilung", x = "Alter", y = "Anzahl Personen", fill="Wechseljahre") +
   theme_minimal()
 
 # binwidth 5
-ggplot(enhancedPatients, aes(x = alter, fill=wechseljahre)) +
+ggplot(enhancedPatients, aes(x = age, fill=menopause)) +
   geom_histogram(binwidth = 5, color = "white") +
   scale_fill_manual(values= c("steelblue","darkgreen"))+
   labs(title = "Altersverteilung", x = "Alter", y = "Anzahl Personen", fill="Wechseljahre") +
@@ -124,7 +124,7 @@ ggplot(enhancedPatients, aes(x = alter, fill=wechseljahre)) +
   theme_minimal()
 
 ## Visualisierung der Patienten in Wechseljahren
-ggplot(enhancedPatients, aes(x = wechseljahre)) +
+ggplot(enhancedPatients, aes(x = menopause)) +
   geom_bar(stat = "count", fill = "steelblue", color = "white") +
   labs(title = "Anzahl Patienten in Wechseljahre", x = "Wechseljahre", y = "Anzahl")+
   geom_text(aes(label=after_stat(count)),stat = "count", position = position_stack(vjust = 0.5), color="black")+
@@ -132,7 +132,7 @@ ggplot(enhancedPatients, aes(x = wechseljahre)) +
   theme_minimal()
 
 ## Visualisierung der Anzahl an Patienten in Wechseljahren nach Geschlecht
-ggplot(enhancedPatients, aes(x = wechseljahre)) +
+ggplot(enhancedPatients, aes(x = menopause)) +
   geom_bar(stat = "count", fill = "steelblue", color = "white") +
   facet_wrap(~ gender) +
   labs(title = "Verteilung von Wechseljahren nach Geschlecht",
@@ -153,7 +153,7 @@ ggplot(enhancedPatients, aes(x = prophylaxeMed)) +
 ggplot(enhancedPatients, aes(x = prophylaxeMed, fill=prophylaxeMed)) +
   geom_bar(stat = "count", color = "white") +
   scale_fill_manual(values= c("steelblue","darkgreen"))+
-  facet_wrap(~wechseljahre) +
+  facet_wrap(~menopause) +
   labs(title = "Verteilung von Prophlaxemedikamenten nach Wechseljahren",
        x = "Prophylaxemedikation",
        y = "Anzahl") +
@@ -182,14 +182,14 @@ ggplot(enhancedPatients, aes(x = nProphylaxeMed)) +
 
 # Nach Wechseljahren %
 ggplot(enhancedPatients, aes(x=nProphylaxeMed)) +
-  facet_wrap(~wechseljahre)+
+  facet_wrap(~menopause)+
   geom_histogram(aes(y=after_stat(density)),binwidth = 1, fill = "steelblue", color = "white") +
   labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
   theme_minimal()
 
 # Nach Wechseljahren absolut
 ggplot(enhancedPatients, aes(x=nProphylaxeMed)) +
-  facet_wrap(~wechseljahre)+
+  facet_wrap(~menopause)+
   geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
   labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
   geom_text(aes(label=after_stat(count)),stat = "count",position = position_stack(vjust = 0.5),size=3.0, angle=90)+
@@ -212,12 +212,12 @@ ggplot(enhancedPatients, aes(x=nProphylaxeMed),) +
 
 ##In 10er Altersgruppen aufteilen
 enhancedPatients$ageGroup <- cut(
-  enhancedPatients$alter,
-  breaks = seq(0, max(enhancedPatients$alter, na.rm = TRUE) + 10, by = 10),
+  enhancedPatients$age,
+  breaks = seq(0, max(enhancedPatients$age, na.rm = TRUE) + 10, by = 10),
   right = FALSE,
   include.lowest = TRUE,
-  labels = paste(seq(0, max(enhancedPatients$alter, na.rm = TRUE), by = 10),
-                 seq(9, max(enhancedPatients$alter, na.rm = TRUE) + 9, by = 10),
+  labels = paste(seq(0, max(enhancedPatients$age, na.rm = TRUE), by = 10),
+                 seq(9, max(enhancedPatients$age, na.rm = TRUE) + 9, by = 10),
                  sep = "-")
 )
 
@@ -242,13 +242,13 @@ ggplot(avgEffectByAgeGroup, aes(x = ageGroup, y = meanEffect)) +
 
 # Durchschnittliche Dosierung pro Wechseljahres-Gruppe berechnen
 avgEffectByMenopause <- enhancedPatients %>%
-  group_by(wechseljahre) %>%
+  group_by(menopause) %>%
   summarise(
     meanEffect = mean(avgProphylaxisEffect, na.rm = TRUE),
     count = n()
   )
 
-ggplot(avgEffectByMenopause, aes(x = as.factor(wechseljahre), y = meanEffect)) +
+ggplot(avgEffectByMenopause, aes(x = as.factor(menopause), y = meanEffect)) +
   geom_col(fill = "darkgreen") +
   geom_text(aes(label = meanEffect), vjust = -0.5) +
   labs(title = "Durchschnittlicher Prophylaxe-Effekt nach Wechseljahresstatus",
@@ -260,13 +260,13 @@ ggplot(avgEffectByMenopause, aes(x = as.factor(wechseljahre), y = meanEffect)) +
 library(dplyr)
 
 avgEffectByAge <- enhancedPatients %>%
-  group_by(alter) %>%
+  group_by(age) %>%
   summarise(
     meanEffect = mean(avgProphylaxisEffect, na.rm = TRUE),
     count = n()
   )
 
-ggplot(avgEffectByAge, aes(x = alter, y = meanEffect)) +
+ggplot(avgEffectByAge, aes(x = age, y = meanEffect)) +
   geom_col(fill = "darkgreen") +
   geom_text(aes(label = round(meanEffect, 2)), vjust = -0.5) +
   labs(title = "Durchschnittliche Prophylaxe-Effekt pro Alter",
@@ -295,13 +295,13 @@ ggplot(avgDosageByAgeGroup, aes(x = ageGroup, y = meanDosage)) +
 
 # Durchschnittliche Dosierung pro Wechseljahres-Gruppe berechnen
 avgDosageByMenopause <- enhancedPatients %>%
-  group_by(wechseljahre) %>%
+  group_by(menopause) %>%
   summarise(
     meanDosage = mean(avgProphylaxisDosage, na.rm = TRUE),
     count = n()
   )
 
-ggplot(avgDosageByMenopause, aes(x = as.factor(wechseljahre), y = meanDosage)) +
+ggplot(avgDosageByMenopause, aes(x = as.factor(menopause), y = meanDosage)) +
   geom_col(fill = "darkgreen") +
   geom_text(aes(label = meanDosage), vjust = -0.5) +
   labs(title = "Durchschnittliche Dosierung nach Wechseljahresstatus",
@@ -313,13 +313,13 @@ ggplot(avgDosageByMenopause, aes(x = as.factor(wechseljahre), y = meanDosage)) +
 library(dplyr)
 
 avgDosageByAge <- enhancedPatients %>%
-  group_by(alter) %>%
+  group_by(age) %>%
   summarise(
     meanDosage = mean(avgProphylaxisDosage, na.rm = TRUE),
     count = n()
   )
 
-ggplot(avgDosageByAge, aes(x = alter, y = meanDosage)) +
+ggplot(avgDosageByAge, aes(x = age, y = meanDosage)) +
   geom_col(fill = "darkgreen") +
   geom_text(aes(label = round(meanDosage, 0)), vjust = -0.5) +
   labs(title = "Durchschnittliche Prophylaxe-Dosierung pro Alter",
@@ -348,13 +348,13 @@ ggplot(avgTolerabilityByAgeGroup, aes(x = ageGroup, y = meanTolerability)) +
 
 # Durchschnittliche Tolerability pro Wechseljahres-Gruppe berechnen
 avgTolerabilityByMenopause <- enhancedPatients %>%
-  group_by(wechseljahre) %>%
+  group_by(menopause) %>%
   summarise(
     meanTolerability = mean(avgProphylaxisTolerability, na.rm = TRUE),
     count = n()
   )
 
-ggplot(avgTolerabilityByMenopause, aes(x = as.factor(wechseljahre), y = meanTolerability)) +
+ggplot(avgTolerabilityByMenopause, aes(x = as.factor(menopause), y = meanTolerability)) +
   geom_col(fill = "darkgreen") +
   geom_text(aes(label = meanTolerability), vjust = -0.5) +
   labs(title = "Durchschnittliche Tolerability nach Wechseljahresstatus",
@@ -366,13 +366,13 @@ ggplot(avgTolerabilityByMenopause, aes(x = as.factor(wechseljahre), y = meanTole
 library(dplyr)
 
 avgTolerabilityByAge <- enhancedPatients %>%
-  group_by(alter) %>%
+  group_by(age) %>%
   summarise(
     meanTolerability = mean(avgProphylaxisEffect, na.rm = TRUE),
     count = n()
   )
 
-ggplot(avgTolerabilityByAge, aes(x = alter, y = meanTolerability)) +
+ggplot(avgTolerabilityByAge, aes(x = age, y = meanTolerability)) +
   geom_col(fill = "darkgreen") +
   geom_text(aes(label = round(meanTolerability, 1)), vjust = -0.5) +
   labs(title = "Durchschnittliche Prophylaxe-Tolerability pro Alter",
@@ -391,7 +391,7 @@ ggplot(enhancedPatients, aes(x = abortedProphylaxeMed)) +
 ggplot(enhancedPatients, aes(x = abortedProphylaxeMed, fill=abortedProphylaxeMed)) +
   geom_bar(stat = "count", color = "white") +
   scale_fill_manual(values= c("steelblue","darkgreen"))+
-  facet_wrap(~wechseljahre) +
+  facet_wrap(~menopause) +
   labs(title = "Verteilung von abgesetzten Prophlaxemedikamenten nach Wechseljahren",
        x = "Prophylaxemedikation abgesetzt",
        y = "Anzahl") +
@@ -420,14 +420,14 @@ ggplot(enhancedPatients, aes(x = nAbortedProphylaxeMed)) +
 
 # Nach Wechseljahren %
 ggplot(enhancedPatients, aes(x=nAbortedProphylaxeMed)) +
-  facet_wrap(~wechseljahre)+
+  facet_wrap(~menopause)+
   geom_histogram(aes(y=after_stat(density)),binwidth = 1, fill = "steelblue", color = "white") +
   labs(title = "Verteilung Anzahl abgesetzter Prophylaxemedikamente nach Wechseljahren", x = "Anzahl abgesetzter Prophylaxe Medikamente", y = "Prozent der Patienten") +
   theme_minimal()
 
 # Nach Wechseljahren absolut
 ggplot(enhancedPatients, aes(x=nAbortedProphylaxeMed)) +
-  facet_wrap(~wechseljahre)+
+  facet_wrap(~menopause)+
   geom_histogram(aes(y=after_stat(count)),binwidth = 1, fill = "steelblue", color = "white") +
   labs(title = "Verteilung Anzahl abgesetzter Prophylaxemedikamente nach Wecheljahren", x = "Anzahl abgesetzter Prophylaxe Medikamente", y = "Prozent der Patienten") +
   geom_text(aes(label=after_stat(count)),stat = "count",position = position_stack(vjust = 0.5),size=3.0, angle=90)+
