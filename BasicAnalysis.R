@@ -94,16 +94,21 @@ getColumnNamesExampleValueInCsv <- function() {
 ### Nötigen Librarys
 library(ggplot2)
 library(dplyr)
+library(glue)
 library(patchwork)
 
 ### Initialisiere Variablen
 ## Festlegen welche Visite
 curAllPatients <- PatientenV1
+## Festlegen von wann bis wann Wechseljahre
+menopauseStart <- 45
+menopauseEnd <- 55
 
 ## Daten um weitere berechnete Felder ergänzen
 enhanceData <- function(patients) {
   prophylaxeMedNameColumns <- grep("preventive_name_p", names(patients), value = TRUE)
   prophylaxeAbortedMedNameColumns <- grep("preventive_name_fp", names(patients), value = TRUE)
+  prophylaxeAbortedMedEndDateColumns <- grep("end_date_fp_", names(patients), value = TRUE)
   prophylaxeMedEffectColumns <- grep("effect_p", names(patients), value = TRUE)
   prophylaxeMedDosageColumns <- grep("dosage_p", names(patients), value = TRUE)
   prophylaxeMedTolerabilityColumns <- grep("tolerability_p", names(patients), value = TRUE)
@@ -116,7 +121,7 @@ enhanceData <- function(patients) {
 
   patients$birthyear <- as.numeric(patients$birthyear)
   patients$age <- as.numeric(format(as.Date(patients[, grep("^date_dc_K\\d{1,2}$", names(patients))]), "%Y")) - patients$birthyear
-  patients$menopause <- patients$age < 55 & patients$age > 45
+  patients$menopause <- patients$age < menopauseEnd & patients$age > menopauseStart
   patients$prophylaxeMed <- patients[prophylaxeMedNameColumns[1]] != "0"
   patients$nProphylaxeMed <- rowSums(patients[, prophylaxeMedNameColumns] != "0")
   patients$abortedProphylaxeMed <- patients[prophylaxeAbortedMedNameColumns[1]] != "0"
@@ -148,6 +153,21 @@ enhanceData <- function(patients) {
     }
     mean(x_nonzero)
   })
+
+  # Alter beim Absetzen jeder abgebrochenen Medikation berechnen
+  for (col in prophylaxeAbortedMedEndDateColumns) {
+    new_col_name <- paste0("abortedAge_", sub("end_date_fp_(\\d+)_K\\d+", "\\1", col))
+    
+    date_values <- patients[[col]]    
+    date_values[date_values == 0 | date_values == "0"] <- NA
+    
+    parsed_dates <- as.Date(date_values, format = "%Y-%m-%d")
+    end_year <- as.numeric(format(as.Date(date_values), "%Y"))
+    abortedAge <- ifelse(is.na(end_year), NA, end_year - patients$birthyear)
+    
+    patients[[new_col_name]] <- abortedAge
+  }
+
 
   patients
 }
@@ -380,13 +400,9 @@ initializeVariables()
 ## In 10er Altersgruppen aufteilen
 enhancedPatients$ageGroup10 <- cut(
   enhancedPatients$age,
-  breaks = seq(0, max(enhancedPatients$age, na.rm = TRUE) + 10, by = 10),
+  breaks = c(menopauseStart-10, menopauseStart, menopauseEnd, menopauseEnd+10),
   right = FALSE,
-  include.lowest = TRUE,
-  labels = paste(seq(0, max(enhancedPatients$age, na.rm = TRUE), by = 10),
-    seq(9, max(enhancedPatients$age, na.rm = TRUE) + 9, by = 10),
-    sep = "-"
-  )
+  labels = c(glue("{menopauseStart-10}–{menopauseStart-1}"), glue("{menopauseStart}–{menopauseEnd-1}"), glue("{menopauseEnd}-{menopauseEnd+9}"))
 )
 
 ### Plots zur Datenvisualisierung
@@ -535,7 +551,9 @@ prophylaxisMedicationAmountDistributionByGenderAbsolute <- function() {
 ## Visualisierung der Prophylaxe Effekt
 # Durschnitts Phrophylaxe Effekt pro 10 Jahre Altersgruppe
 averageProphylaxisEffectBy10YearAgeGroup <- function() {
-  avgEffectByAgeGroup <- enhancedPatients %>%
+  filteredPatients <- enhancedPatients %>%
+    filter(!is.na(ageGroup10))
+  avgEffectByAgeGroup <- filteredPatients %>%
     group_by(ageGroup10) %>%
     summarise(
       meanEffect = mean(avgProphylaxisEffect, na.rm = TRUE),
@@ -858,6 +876,59 @@ abortedProphylaxisMedAmountDistributionByGenderAbsolute <- function() {
     geom_histogram(aes(y = after_stat(count)), binwidth = 1, fill = "steelblue", color = "white") +
     labs(title = "Verteilung Anzahl abgesetzter Prophylaxemedikamente nach Geschlecht", x = "Anzahl abgesetzter Prophylaxe Medikamente", y = "Prozent der Patienten") +
     geom_text(aes(label = after_stat(count)), stat = "count", position = position_stack(vjust = 0.5), size = 3.0) +
+    theme_minimal()
+}
+
+## Visualisierung der Verteilung des Alters bei Absetzten eines Prophylaxe Medikaments
+# Nach Alter absolut
+abortedAgeProphylaxisMedDistributionByAgeAbsolute <- function() {
+  aborted_cols <- grep("^abortedAge_", names(enhancedPatients), value = TRUE)
+  aborted_all <- as.numeric(unlist(enhancedPatients[, aborted_cols]))
+  aborted_all <- aborted_all[!is.na(aborted_all)]
+  aborted_df <- data.frame(abortedAge = aborted_all)
+
+  print(summary(aborted_df$abortedAge))
+  ggplot(data = aborted_df, aes(x = abortedAge)) + 
+    geom_histogram(binwidth = 1, fill = "firebrick", color = "white", alpha = 0.8) +
+    labs(
+      title = "Alter beim Absetzen von Prophylaxemedikamenten",
+      x = "Abgesetzt-Alter (Jahre)",
+      y = "Anzahl abgesetzter Medikamente"
+    ) +
+    theme_minimal()
+}
+
+# Nach Wechseljahren absolut
+abortedAgeProphylaxisMedDistributionByMenopauseAbsolute <- function() {
+  # Relevante Spalten extrahieren
+  aborted_cols <- grep("^abortedAge_", names(enhancedPatients), value = TRUE)
+
+  # Alle Werte in einen Vektor umwandeln
+  aborted_all <- as.numeric(unlist(enhancedPatients[, aborted_cols]))
+  aborted_all <- aborted_all[!is.na(aborted_all)]
+
+  # Klassifizieren, ob innerhalb oder außerhalb der Wechseljahre
+  menopauseStatus <- ifelse(
+    aborted_all >= menopauseStart & aborted_all <= menopauseEnd,
+    "innerhalb Wechseljahre",
+    "außerhalb Wechseljahre"
+  )
+
+  # Dataframe erstellen
+  aborted_df <- data.frame(
+    abortedAge = aborted_all,
+    menopauseStatus = menopauseStatus
+  )
+
+  # Plot
+  ggplot(aborted_df, aes(x = menopauseStatus)) +
+    geom_bar(fill = "steelblue", color = "white", alpha = 0.9) +
+    geom_text(stat = "count", aes(label = ..count..), vjust = -0.5) +
+    labs(
+      title = "Abgesetzte Prophylaxemedikamente in/außerhalb der Wechseljahre",
+      x = "Menopause-Status",
+      y = "Anzahl abgesetzter Medikamente"
+    ) +
     theme_minimal()
 }
 
