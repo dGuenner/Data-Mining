@@ -15,7 +15,7 @@
 # averageProphylaxisEffectBy10YearAgeGroup()
 # averageProphylaxisEffectByMenopause()
 # averageProphylaxisEffectByAge1()
- averageProphylaxisEffectByAge2()
+# averageProphylaxisEffectByAge2()
 # averageProphylaxisDosageBy10YearAgeGroup()
 # averageProphylaxisDosageByMenopause()
 # averageProphylaxisDosageByAge1()
@@ -31,6 +31,19 @@
 # abortedProphylaxisMedAmountDistributionByMenopauseAbsolute()
 # abortedProphylaxisMedAmountDistributionByGenderRelativ()
 # abortedProphylaxisMedAmountDistributionByGenderAbsolute()
+
+### Plots zur Medikamentenverteilung
+
+# plotMedicationUsageGeneral()
+# plotMedicationUsageMenopause()
+# plotMedicationUsageNotMenopause()
+# plotMedicationUsageComparison()
+# plotMedicationGroupsGeneral()
+# plotMedicationGroupsMenopause()
+# plotMedicationGroupsNotMenopause()
+# plotMedicationGroupsComparison()
+# plotMedicationGroupsComparisonPercent()
+# plotMedicationGroupsComparisonAbsAndPercent()
 
 ### Einlesen der Daten
 PatientenV1 <- read.csv("Daten\\PatientInnendaten mit Visiten-20250423\\Patients_V1_10-03-2025.csv", header = TRUE, sep = ";")
@@ -81,6 +94,7 @@ getColumnNamesExampleValueInCsv <- function() {
 ### Nötigen Librarys
 library(ggplot2)
 library(dplyr)
+library(patchwork)
 
 ### Initialisiere Variablen
 ## Festlegen welche Visite
@@ -139,6 +153,229 @@ enhanceData <- function(patients) {
 }
 
 enhancedPatients <- enhanceData(curAllPatients)
+patientsPredMeds <- enhancedPatients$prophylaxeMed == TRUE
+
+getUniqueMedicationGroupsUsage <- function(data, med_groups) {
+  library(magrittr)
+  columns <- grep("preventive_name_p", names(data), value = TRUE)
+  allMeds <- unlist(lapply(data[, columns], function(x) as.character(x)))
+  allMeds <- sort(unique(allMeds))
+  allMeds <- allMeds[allMeds != "0"] # Entferne '0' Werte
+  
+  # Erstelle eine Zuordnung von Medikament zu Gruppe
+  med_to_group <- data.frame(
+    medication = character(),
+    group = character(),
+    stringsAsFactors = FALSE
+  )
+  
+  for (group_name in names(med_groups)) {
+    for (med in med_groups[[group_name]]) {
+      med_to_group <- rbind(med_to_group, data.frame(
+        medication = med,
+        group = group_name,
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+  
+  # Berechne die Medikamentenhäufigkeiten wie vorher
+  meds_each_column <- list()
+  for (column in columns) {
+    freqMeds <- plyr::count(data, column)
+    meds_each_column <- append(meds_each_column, freqMeds)
+  }
+  
+  meds_each_column_menopause <- list()
+  menopause_only <- data %>% dplyr::filter(menopause == TRUE)
+  for (column in columns) {
+    freqMeds <- plyr::count(menopause_only, column)
+    meds_each_column_menopause <- append(meds_each_column_menopause, freqMeds)
+  }
+  
+  menopause_excluded <- data %>% dplyr::filter(menopause == FALSE)
+  meds_each_column_not_menopause <- list()
+  for (column in columns) {
+    freqMeds <- plyr::count(menopause_excluded, column)
+    meds_each_column_not_menopause <- append(meds_each_column_not_menopause, freqMeds)
+  }
+  
+  # Transformiere Daten für alle drei Kategorien
+  resultGeneral <- as.data.frame(transformMedicationData(meds_each_column))
+  resultGeneral <- resultGeneral[resultGeneral$medication != "0", ]
+  
+  resultMenopause <- as.data.frame(transformMedicationData(meds_each_column_menopause))
+  resultMenopause <- resultMenopause[resultMenopause$medication != "0", ]
+  
+  resultNotMenopause <- as.data.frame(transformMedicationData(meds_each_column_not_menopause))
+  resultNotMenopause <- resultNotMenopause[resultNotMenopause$medication != "0", ]
+  
+  # Füge Gruppenzugehörigkeit hinzu
+  addGroupInfo <- function(result_df) {
+    result_df$group <- "Sonstige"
+    for (i in 1:nrow(result_df)) {
+      idx <- which(med_to_group$medication == result_df$medication[i])
+      if (length(idx) > 0) {
+        result_df$group[i] <- med_to_group$group[idx[1]]
+      }
+    }
+    return(result_df)
+  }
+  
+  resultGeneral <- addGroupInfo(resultGeneral)
+  resultMenopause <- addGroupInfo(resultMenopause)
+  resultNotMenopause <- addGroupInfo(resultNotMenopause)
+  
+  # Aggregiere nach Gruppen
+  resultGeneralByGroup <- resultGeneral %>%
+    dplyr::group_by(group) %>%
+    dplyr::summarise(usage = sum(usage))
+  
+  resultMenopauseByGroup <- resultMenopause %>%
+    dplyr::group_by(group) %>%
+    dplyr::summarise(usage = sum(usage))
+  
+  resultNotMenopauseByGroup <- resultNotMenopause %>%
+    dplyr::group_by(group) %>%
+    dplyr::summarise(usage = sum(usage))
+  
+  # Rückgabe der ursprünglichen und der nach Gruppen aggregierten Daten
+  return(list(
+    individual = list(resultGeneral, resultMenopause, resultNotMenopause),
+    byGroup = list(resultGeneralByGroup, resultMenopauseByGroup, resultNotMenopauseByGroup)
+  ))
+}
+
+getUniqueMedicationUsage <- function(data) {
+  library(magrittr)
+  columns <- grep("preventive_name_p", names(data), value = TRUE)
+  allMeds <- unlist(lapply(data[, columns], function(x) as.character(x)))
+  allMeds <- sort(unique(allMeds))
+  meds_each_column <- list()
+  for (column in columns) {
+    freqMeds <- plyr::count(data, column)
+    meds_each_column <- append(meds_each_column, freqMeds)
+  }
+  meds_each_column_menopause <- list()
+  menopause_only <- data %>% dplyr::filter(menopause == TRUE)
+  for (column in columns) {
+    freqMeds <- plyr::count(menopause_only, column)
+    meds_each_column_menopause <- append(meds_each_column_menopause, freqMeds)
+  }
+  menopause_excluded <- data %>% dplyr::filter(menopause == FALSE)
+  meds_each_column_not_menopause <- list()
+  for (column in columns) {
+    freqMeds <- plyr::count(menopause_excluded, column)
+    meds_each_column_not_menopause <- append(meds_each_column_not_menopause, freqMeds)
+  }
+  
+  resultGeneral <- as.data.frame(transformMedicationData(meds_each_column))
+  missing_medication <- setdiff(allMeds, resultGeneral$medication)
+  if (length(missing_medication) > 0) {
+    missing_df <- data.frame(
+      medication = missing_medication,
+      usage = rep(0, length(missing_medication))
+    )
+    resultGeneral <- rbind(resultGeneral, missing_df)
+  }
+  
+  resultMenopause <- as.data.frame(transformMedicationData(meds_each_column_menopause))
+  missing_medication <- setdiff(allMeds, resultMenopause$medication)
+  if (length(missing_medication) > 0) {
+    missing_df <- data.frame(
+      medication = missing_medication,
+      usage = rep(0, length(missing_medication))
+    )
+    resultMenopause <- rbind(resultMenopause, missing_df)
+  }
+  
+  resultNotMenopause <- as.data.frame(transformMedicationData(meds_each_column_not_menopause))
+  missing_medication <- setdiff(allMeds, resultNotMenopause$medication)
+  if (length(missing_medication) > 0) {
+    missing_df <- data.frame(
+      medication = missing_medication,
+      usage = rep(0, length(missing_medication))
+    )
+    resultNotMenopause <- rbind(uniqueMedsGeneral, missing_df)
+  }
+  return(list(resultGeneral, resultMenopause, resultNotMenopause))
+}
+
+# Initialisierung der Variablen
+# Verwende die Funktion zur Berechnung der Medikamentennutzung nach Gruppen
+initializeVariables <- function() {
+  # Definiere die Medikamentengruppen global
+  med_groups <<- list(
+    "Betablocker" = c("Propranolol", "Metoprolol", "Bisoprolol"),
+    "Flunarizin" = "Flunarizin",
+    "Topiramat" = "Topiramat",
+    "Amitriptylin" = "Amitriptylin",
+    "OnabotulinumtoxinA" = "OnabotulinumtoxinA",
+    "CGRP(R)-Ak" = c("Eptinezumab", "Erenumab", "Fremanezumab", "Galcanezumab")
+  )
+  
+  # Berechne die Medikamentendaten
+  grouped_results <<- getUniqueMedicationGroupsUsage(enhancedPatients, med_groups)
+  
+  # Extrahiere die nach Gruppen aggregierten Daten global
+  groupedMedsGeneral <<- grouped_results$byGroup[[1]]
+  groupedMedsMenopause <<- grouped_results$byGroup[[2]]
+  groupedMedsNotMenopause <<- grouped_results$byGroup[[3]]
+  
+  # Berechne die Medikamentendaten ohne Gruppierung
+  result <<- getUniqueMedicationUsage(enhancedPatients)
+  uniqueMedsGeneral <<- result[[1]][result[[1]]$medication != "0", ]
+  uniqueMedsMenopause <<- result[[2]][result[[2]]$medication != "0", ]
+  uniqueMedsNotMenopasue <<- result[[3]][result[[3]]$medication != "0", ]
+  
+  # Erstelle ein kombiniertes Dataframe für Vergleiche und entferne die "Sonstige" Gruppe
+  grouped_comparison <<- rbind(
+    transform(groupedMedsMenopause, status = "Menopause"),
+    transform(groupedMedsNotMenopause, status = "Nicht-Menopause")
+  )
+  grouped_comparison <<- grouped_comparison[grouped_comparison$group != "Sonstige", ]
+  
+  # Berechne prozentuale Verteilungen
+  grouped_comparison_percent <<- grouped_comparison %>%
+    group_by(status) %>%
+    mutate(percentage = usage / sum(usage) * 100)
+}
+
+getUniqueMedicationNames <- function(data) {
+  columns <- grep("preventive_name_p", names(data), value = TRUE)
+  
+  unique_values <- lapply(data[, columns], unique)
+  
+  uniqueMeds <- unique(unlist(unique_values))
+  uniqueMeds[uniqueMeds != "0"]
+}
+medicationNames <- getUniqueMedicationNames(enhancedPatients)
+print(medicationNames)
+
+transformMedicationData <- function(meds_each_column) {
+  result <- data.frame(medication = character(), usage = numeric())
+  for (i in seq(1, length(meds_each_column), by = 2)) {
+    for (k in 1:(length(meds_each_column[[i]]))) {
+      if (as.character(meds_each_column[[i]][[k]]) %in% result$medication) {
+        idx <- which(result$medication == as.character(meds_each_column[[i]][k]))
+        result[idx, "usage"] <- (result[idx, "usage"] + meds_each_column[[i + 1]][k])
+      } else {
+        new_row <- data.frame(
+          medication = as.character(meds_each_column[[i]][[k]]),
+          usage = as.numeric(meds_each_column[[i + 1]][[k]])
+        )
+        result <- rbind(result, new_row)
+      }
+    }
+    return(result)
+  }
+}
+
+# Führe die Initialisierung aus
+initializeVariables()
+
+
+## Verwendung von bestimmten Medikamenten
 
 ## In 10er Altersgruppen aufteilen
 enhancedPatients$ageGroup10 <- cut(
@@ -368,14 +605,20 @@ averageProphylaxisEffectByAge2 <- function() {
   # Plot
   ggplot() +
     # Alle Datenpunkte als Punkte mit geringer Opazität
-    geom_point(data = enhancedPatients, aes(x = age, y = avgProphylaxisEffect), 
-              color = "darkgreen", alpha = 0.2) +
+    geom_point(
+      data = enhancedPatients, aes(x = age, y = avgProphylaxisEffect),
+      color = "darkgreen", alpha = 0.2
+    ) +
     # Linie für Durchschnittswerte mit höherer Opazität
-    geom_line(data = avgEffectByAge, aes(x = age, y = meanEffect), 
-              color = "red", size = 1, alpha = 0.9) +
-    labs(title = "Durchschnittlicher Prophylaxe-Effektpro Alter",
-        x = "Alter (Jahre)",
-        y = "Ø Prophylaxe-Effekt") +
+    geom_line(
+      data = avgEffectByAge, aes(x = age, y = meanEffect),
+      color = "red", size = 1, alpha = 0.9
+    ) +
+    labs(
+      title = "Durchschnittlicher Prophylaxe-Effektpro Alter",
+      x = "Alter (Jahre)",
+      y = "Ø Prophylaxe-Effekt"
+    ) +
     theme_minimal()
 }
 
@@ -452,14 +695,20 @@ averageProphylaxisDosageByAge2 <- function() {
   # Plot
   ggplot() +
     # Alle Datenpunkte als Punkte mit geringer Opazität
-    geom_point(data = enhancedPatients, aes(x = age, y = avgProphylaxisDosage), 
-              color = "darkgreen", alpha = 0.2) +
+    geom_point(
+      data = enhancedPatients, aes(x = age, y = avgProphylaxisDosage),
+      color = "darkgreen", alpha = 0.2
+    ) +
     # Linie für Durchschnittswerte mit höherer Opazität
-    geom_line(data = avgDosageByAge, aes(x = age, y = meanDosage), 
-              color = "red", size = 1, alpha = 0.9) +
-    labs(title = "Durchschnittliche Prophylaxe-Dosierung pro Alter",
-        x = "Alter (Jahre)",
-        y = "Ø Prophylaxe-Dosierung") +
+    geom_line(
+      data = avgDosageByAge, aes(x = age, y = meanDosage),
+      color = "red", size = 1, alpha = 0.9
+    ) +
+    labs(
+      title = "Durchschnittliche Prophylaxe-Dosierung pro Alter",
+      x = "Alter (Jahre)",
+      y = "Ø Prophylaxe-Dosierung"
+    ) +
     theme_minimal()
 }
 
@@ -610,4 +859,113 @@ abortedProphylaxisMedAmountDistributionByGenderAbsolute <- function() {
     labs(title = "Verteilung Anzahl abgesetzter Prophylaxemedikamente nach Geschlecht", x = "Anzahl abgesetzter Prophylaxe Medikamente", y = "Prozent der Patienten") +
     geom_text(aes(label = after_stat(count)), stat = "count", position = position_stack(vjust = 0.5), size = 3.0) +
     theme_minimal()
+}
+
+# Plot für allgemeine Medikamentennutzung
+plotMedicationUsageGeneral <- function() {
+  ggplot(uniqueMedsGeneral, aes(x = medication, y = usage)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = "Medikamentenverwendung allgemein", x = "Medikament", y = "Verwendung") +
+    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+}
+
+# Plot für Medikamentennutzung in Wechseljahren
+plotMedicationUsageMenopause <- function() {
+  ggplot(uniqueMedsMenopause, aes(x = medication, y = usage)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = "Medikamentenverwendung in Wechseljahren", x = "Medikament", y = "Verwendung") +
+    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+}
+
+# Plot für Medikamentennutzung außerhalb der Wechseljahre
+plotMedicationUsageNotMenopause <- function() {
+  ggplot(uniqueMedsNotMenopasue, aes(x = medication, y = usage)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = "Medikamentenverwendung außerhalb Wechseljahre", x = "Medikament", y = "Verwendung") +
+    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+}
+
+# Vergleich der Medikamentennutzung zwischen Wechseljahren und nicht Wechseljahren
+plotMedicationUsageComparison <- function() {
+  medUsageMenopause <- plotMedicationUsageMenopause()
+  medUsageNotMenopause <- plotMedicationUsageNotMenopause()
+  medUsageMenopause + medUsageNotMenopause + plot_layout(ncol = 2)
+}
+
+# Plot für allgemeine Medikamentengruppen-Verwendung
+plotMedicationGroupsGeneral <- function() {
+  ggplot(groupedMedsGeneral, aes(x = group, y = usage)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = "Medikamentengruppen - Allgemeine Verwendung", x = "Gruppe", y = "Anzahl") +
+    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+}
+
+# Plot für Medikamentengruppen-Verwendung in Wechseljahren
+plotMedicationGroupsMenopause <- function() {
+  ggplot(groupedMedsMenopause, aes(x = group, y = usage)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = "Medikamentengruppen - Wechseljahre", x = "Gruppe", y = "Anzahl") +
+    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+}
+
+# Plot für Medikamentengruppen-Verwendung außerhalb der Wechseljahre
+plotMedicationGroupsNotMenopause <- function() {
+  ggplot(groupedMedsNotMenopause, aes(x = group, y = usage)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = "Medikamentengruppen - Außerhalb Wechseljahre", x = "Gruppe", y = "Anzahl") +
+    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+}
+
+# Vergleich der Medikamentengruppen-Verwendung
+plotMedicationGroupsComparison <- function() {
+  medGroupsMenopause <- plotMedicationGroupsMenopause()
+  medGroupsNotMenopause <- plotMedicationGroupsNotMenopause()
+  medGroupsMenopause + medGroupsNotMenopause + plot_layout(ncol = 2)
+}
+
+# Plot für Vergleich der Medikamentengruppen-Nutzung (absolute Zahlen)
+plotMedicationGroupsComparisonAbs <- function() {
+  ggplot(grouped_comparison, aes(x = group, y = usage, fill = status)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(
+      title = "Vergleich der Medikamentengruppen-Nutzung (absolute Zahlen)",
+      x = "Medikamentengruppe", y = "Anzahl", fill = "Status"
+    ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_manual(values = c("Menopause" = "darkred", "Nicht-Menopause" = "darkgreen"))
+}
+
+# Plot für Vergleich der Medikamentengruppen-Nutzung (prozentual)
+plotMedicationGroupsComparisonPercent <- function() {
+  ggplot(grouped_comparison_percent, aes(x = group, y = percentage, fill = status)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(
+      title = "Vergleich der Medikamentengruppen-Nutzung (prozentual)",
+      x = "Medikamentengruppe", y = "Prozent (%)", fill = "Status"
+    ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_manual(values = c("Menopause" = "darkred", "Nicht-Menopause" = "darkgreen")) +
+    geom_text(aes(label = sprintf("%.1f%%", percentage)),
+              position = position_dodge(width = 0.9),
+              vjust = -0.5, size = 3
+    )
+}
+
+# Plot für Vergleich der Medikamentengruppen-Nutzung (absolute und prozentuale Werte)
+plotMedicationGroupsComparisonAbsAndPercent <- function() {
+  plotAbs <- plotMedicationGroupsComparisonAbs()
+  plotPercent <- plotMedicationGroupsComparisonPercent()
+  plotAbs / plotPercent + plot_layout(ncol = 1)
 }

@@ -1,4 +1,5 @@
 .Rhistory
-.RData
+.RData*
 /Daten
+Spalten*
 .Rproj.user
