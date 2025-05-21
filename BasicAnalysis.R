@@ -643,7 +643,9 @@ averageProphylaxisEffectByAge2 <- function() {
 ## Visualisierung der Prophylaxe Dosierung
 # Durschnitts Phrophylaxe Dosierung pro 10 Jahre Altersgruppe
 averageProphylaxisDosageBy10YearAgeGroup <- function() {
-  avgDosageByAgeGroup <- enhancedPatients %>%
+  filteredPatients <- enhancedPatients %>%
+  filter(!is.na(ageGroup10))
+  avgDosageByAgeGroup <- filteredPatients %>%
     group_by(ageGroup10) %>%
     summarise(
       meanDosage = mean(avgProphylaxisDosage, na.rm = TRUE),
@@ -733,7 +735,9 @@ averageProphylaxisDosageByAge2 <- function() {
 ## Visualisierung der Prophylaxe Tolerability
 # Durschnitts Prophylaxe Tolerability pro 10 Jahre Altersgruppe
 averageProphylaxisTolerabilityBy10YearAgeGroup <- function() {
-  avgTolerabilityByAgeGroup <- enhancedPatients %>%
+  filteredPatients <- enhancedPatients %>%
+  filter(!is.na(ageGroup10))
+  avgTolerabilityByAgeGroup <- filteredPatients %>%
     group_by(ageGroup10) %>%
     summarise(
       meanTolerability = mean(avgProphylaxisTolerability, na.rm = TRUE),
