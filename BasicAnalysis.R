@@ -1,4 +1,4 @@
-### Main (angeben welche Plot-Funktion ausgeführt wwrden soll):
+### Main (angeben welche Plot-Funktion ausgeführt werden soll):
 # agedistributionBinwidth1()
 # agedistributionBinwidth5()
 # genderDistribution()
@@ -6,6 +6,7 @@
 # menopauseDistributionByGender()
 # prophylaxisMedicationDistribution()
 # prophylaxisMedicationDistributionByMenopause()
+# prophylaxisMedicationDistributionByAge()
 # prophylaxisMedicationDistributionByGender()
 # prophylaxisMedicationAmountDistribution()
 # prophylaxisMedicationAmountDistributionByMenopauseRelativ()
@@ -157,17 +158,25 @@ enhanceData <- function(patients) {
   # Alter beim Absetzen jeder abgebrochenen Medikation berechnen
   for (col in prophylaxeAbortedMedEndDateColumns) {
     new_col_name <- paste0("abortedAge_", sub("end_date_fp_(\\d+)_K\\d+", "\\1", col))
-    
-    date_values <- patients[[col]]    
+
+    date_values <- patients[[col]]
     date_values[date_values == 0 | date_values == "0"] <- NA
-    
+
     parsed_dates <- as.Date(date_values, format = "%Y-%m-%d")
     end_year <- as.numeric(format(as.Date(date_values), "%Y"))
     abortedAge <- ifelse(is.na(end_year), NA, end_year - patients$birthyear)
-    
+
     patients[[new_col_name]] <- abortedAge
   }
 
+  # Remove unused columns
+  # columns_to_remove <- c(
+  #   grep("_a\\d{1,2}_K", names(patients), value = TRUE),
+  #   grep("_fa_", names(patients), value = TRUE)
+  # )
+  # if(length(columns_to_remove) > 0) {
+  #   patients <- patients %>% select(-all_of(columns_to_remove))
+  # }
 
   patients
 }
@@ -181,14 +190,14 @@ getUniqueMedicationGroupsUsage <- function(data, med_groups) {
   allMeds <- unlist(lapply(data[, columns], function(x) as.character(x)))
   allMeds <- sort(unique(allMeds))
   allMeds <- allMeds[allMeds != "0"] # Entferne '0' Werte
-  
+
   # Erstelle eine Zuordnung von Medikament zu Gruppe
   med_to_group <- data.frame(
     medication = character(),
     group = character(),
     stringsAsFactors = FALSE
   )
-  
+
   for (group_name in names(med_groups)) {
     for (med in med_groups[[group_name]]) {
       med_to_group <- rbind(med_to_group, data.frame(
@@ -198,38 +207,38 @@ getUniqueMedicationGroupsUsage <- function(data, med_groups) {
       ))
     }
   }
-  
+
   # Berechne die Medikamentenhäufigkeiten wie vorher
   meds_each_column <- list()
   for (column in columns) {
     freqMeds <- plyr::count(data, column)
     meds_each_column <- append(meds_each_column, freqMeds)
   }
-  
+
   meds_each_column_menopause <- list()
   menopause_only <- data %>% dplyr::filter(menopause == TRUE)
   for (column in columns) {
     freqMeds <- plyr::count(menopause_only, column)
     meds_each_column_menopause <- append(meds_each_column_menopause, freqMeds)
   }
-  
+
   menopause_excluded <- data %>% dplyr::filter(menopause == FALSE)
   meds_each_column_not_menopause <- list()
   for (column in columns) {
     freqMeds <- plyr::count(menopause_excluded, column)
     meds_each_column_not_menopause <- append(meds_each_column_not_menopause, freqMeds)
   }
-  
+
   # Transformiere Daten für alle drei Kategorien
   resultGeneral <- as.data.frame(transformMedicationData(meds_each_column))
   resultGeneral <- resultGeneral[resultGeneral$medication != "0", ]
-  
+
   resultMenopause <- as.data.frame(transformMedicationData(meds_each_column_menopause))
   resultMenopause <- resultMenopause[resultMenopause$medication != "0", ]
-  
+
   resultNotMenopause <- as.data.frame(transformMedicationData(meds_each_column_not_menopause))
   resultNotMenopause <- resultNotMenopause[resultNotMenopause$medication != "0", ]
-  
+
   # Füge Gruppenzugehörigkeit hinzu
   addGroupInfo <- function(result_df) {
     result_df$group <- "Sonstige"
@@ -241,24 +250,24 @@ getUniqueMedicationGroupsUsage <- function(data, med_groups) {
     }
     return(result_df)
   }
-  
+
   resultGeneral <- addGroupInfo(resultGeneral)
   resultMenopause <- addGroupInfo(resultMenopause)
   resultNotMenopause <- addGroupInfo(resultNotMenopause)
-  
+
   # Aggregiere nach Gruppen
   resultGeneralByGroup <- resultGeneral %>%
     dplyr::group_by(group) %>%
     dplyr::summarise(usage = sum(usage))
-  
+
   resultMenopauseByGroup <- resultMenopause %>%
     dplyr::group_by(group) %>%
     dplyr::summarise(usage = sum(usage))
-  
+
   resultNotMenopauseByGroup <- resultNotMenopause %>%
     dplyr::group_by(group) %>%
     dplyr::summarise(usage = sum(usage))
-  
+
   # Rückgabe der ursprünglichen und der nach Gruppen aggregierten Daten
   return(list(
     individual = list(resultGeneral, resultMenopause, resultNotMenopause),
@@ -288,7 +297,7 @@ getUniqueMedicationUsage <- function(data) {
     freqMeds <- plyr::count(menopause_excluded, column)
     meds_each_column_not_menopause <- append(meds_each_column_not_menopause, freqMeds)
   }
-  
+
   resultGeneral <- as.data.frame(transformMedicationData(meds_each_column))
   missing_medication <- setdiff(allMeds, resultGeneral$medication)
   if (length(missing_medication) > 0) {
@@ -298,7 +307,7 @@ getUniqueMedicationUsage <- function(data) {
     )
     resultGeneral <- rbind(resultGeneral, missing_df)
   }
-  
+
   resultMenopause <- as.data.frame(transformMedicationData(meds_each_column_menopause))
   missing_medication <- setdiff(allMeds, resultMenopause$medication)
   if (length(missing_medication) > 0) {
@@ -308,7 +317,7 @@ getUniqueMedicationUsage <- function(data) {
     )
     resultMenopause <- rbind(resultMenopause, missing_df)
   }
-  
+
   resultNotMenopause <- as.data.frame(transformMedicationData(meds_each_column_not_menopause))
   missing_medication <- setdiff(allMeds, resultNotMenopause$medication)
   if (length(missing_medication) > 0) {
@@ -333,28 +342,28 @@ initializeVariables <- function() {
     "OnabotulinumtoxinA" = "OnabotulinumtoxinA",
     "CGRP(R)-Ak" = c("Eptinezumab", "Erenumab", "Fremanezumab", "Galcanezumab")
   )
-  
+
   # Berechne die Medikamentendaten
   grouped_results <<- getUniqueMedicationGroupsUsage(enhancedPatients, med_groups)
-  
+
   # Extrahiere die nach Gruppen aggregierten Daten global
   groupedMedsGeneral <<- grouped_results$byGroup[[1]]
   groupedMedsMenopause <<- grouped_results$byGroup[[2]]
   groupedMedsNotMenopause <<- grouped_results$byGroup[[3]]
-  
+
   # Berechne die Medikamentendaten ohne Gruppierung
   result <<- getUniqueMedicationUsage(enhancedPatients)
   uniqueMedsGeneral <<- result[[1]][result[[1]]$medication != "0", ]
   uniqueMedsMenopause <<- result[[2]][result[[2]]$medication != "0", ]
   uniqueMedsNotMenopasue <<- result[[3]][result[[3]]$medication != "0", ]
-  
+
   # Erstelle ein kombiniertes Dataframe für Vergleiche und entferne die "Sonstige" Gruppe
   grouped_comparison <<- rbind(
     transform(groupedMedsMenopause, status = "Menopause"),
     transform(groupedMedsNotMenopause, status = "Nicht-Menopause")
   )
   grouped_comparison <<- grouped_comparison[grouped_comparison$group != "Sonstige", ]
-  
+
   # Berechne prozentuale Verteilungen
   grouped_comparison_percent <<- grouped_comparison %>%
     group_by(status) %>%
@@ -363,14 +372,13 @@ initializeVariables <- function() {
 
 getUniqueMedicationNames <- function(data) {
   columns <- grep("preventive_name_p", names(data), value = TRUE)
-  
+
   unique_values <- lapply(data[, columns], unique)
-  
+
   uniqueMeds <- unique(unlist(unique_values))
   uniqueMeds[uniqueMeds != "0"]
 }
 medicationNames <- getUniqueMedicationNames(enhancedPatients)
-print(medicationNames)
 
 transformMedicationData <- function(meds_each_column) {
   result <- data.frame(medication = character(), usage = numeric())
@@ -400,7 +408,7 @@ initializeVariables()
 ## In 10er Altersgruppen aufteilen
 enhancedPatients$ageGroup10 <- cut(
   enhancedPatients$age,
-  breaks = c(menopauseStart-10, menopauseStart, menopauseEnd, menopauseEnd+10),
+  breaks = c(menopauseStart - 10, menopauseStart, menopauseEnd, menopauseEnd + 10),
   right = FALSE,
   labels = c(glue("{menopauseStart-10}–{menopauseStart-1}"), glue("{menopauseStart}–{menopauseEnd-1}"), glue("{menopauseEnd}-{menopauseEnd+9}"))
 )
@@ -483,6 +491,33 @@ prophylaxisMedicationDistributionByMenopause <- function() {
     geom_text(aes(label = after_stat(count)), stat = "count", position = position_stack(vjust = 0.5)) +
     scale_x_discrete(labels = c("TRUE" = "Ja", "FALSE" = "Nein")) +
     theme_minimal()
+}
+
+prophylaxisMedicationDistributionByAge <- function() {
+  # Create age groups for better visualization
+  enhancedPatients$ageGroup <- cut(
+    enhancedPatients$age,
+    breaks = seq(min(enhancedPatients$age, na.rm = TRUE),
+      max(enhancedPatients$age, na.rm = TRUE) + 5,
+      by = 5
+    ),
+    right = FALSE
+  )
+
+  ggplot(enhancedPatients, aes(x = ageGroup, fill = prophylaxeMed)) +
+    geom_bar(position = "dodge", color = "white") +
+    scale_fill_manual(
+      values = c("steelblue", "darkgreen"),
+      labels = c("FALSE" = "Nein", "TRUE" = "Ja"),
+      name = "Prophylaxemedikation"
+    ) +
+    labs(
+      title = "Verteilung von Prophylaxemedikamenten nach Alter",
+      x = "Altersgruppe",
+      y = "Anzahl"
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
 }
 
 # nach Geschlecht
@@ -892,7 +927,7 @@ abortedAgeProphylaxisMedDistributionByAgeAbsolute <- function() {
   aborted_df <- data.frame(abortedAge = aborted_all)
 
   print(summary(aborted_df$abortedAge))
-  ggplot(data = aborted_df, aes(x = abortedAge)) + 
+  ggplot(data = aborted_df, aes(x = abortedAge)) +
     geom_histogram(binwidth = 1, fill = "firebrick", color = "white", alpha = 0.8) +
     labs(
       title = "Alter beim Absetzen von Prophylaxemedikamenten",
@@ -1033,8 +1068,8 @@ plotMedicationGroupsComparisonPercent <- function() {
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
     scale_fill_manual(values = c("Menopause" = "darkred", "Nicht-Menopause" = "darkgreen")) +
     geom_text(aes(label = sprintf("%.1f%%", percentage)),
-              position = position_dodge(width = 0.9),
-              vjust = -0.5, size = 3
+      position = position_dodge(width = 0.9),
+      vjust = -0.5, size = 3
     )
 }
 
@@ -1044,3 +1079,94 @@ plotMedicationGroupsComparisonAbsAndPercent <- function() {
   plotPercent <- plotMedicationGroupsComparisonPercent()
   plotAbs / plotPercent + plot_layout(ncol = 1)
 }
+
+# Chi-Quadrat-Test nur für weibliche Patientinnen
+chisq_test_females_only <- function() {
+  # Weibliche Patientinnen filtern
+  female_patients <- enhancedPatients %>% filter(gender == "weiblich", ageGroup10 != "Sonstige")
+
+  # Medikamentendaten für weibliche Patientinnen berechnen
+  female_grouped_results <- getUniqueMedicationGroupsUsage(female_patients, med_groups)
+
+  # Extrahiere die nach Gruppen aggregierten Daten
+  female_groupedMedsMenopause <- female_grouped_results$byGroup[[2]]
+  female_groupedMedsNotMenopause <- female_grouped_results$byGroup[[3]]
+
+  # Erstelle ein kombiniertes Dataframe für Vergleiche und entferne die "Sonstige" Gruppe
+  female_grouped_comparison <- rbind(
+    transform(female_groupedMedsMenopause, status = "Menopause"),
+    transform(female_groupedMedsNotMenopause, status = "Nicht-Menopause")
+  )
+  female_grouped_comparison <- female_grouped_comparison[female_grouped_comparison$group != "Sonstige", ]
+
+  # Erstelle die Kontingenztabelle
+  contingency_table <- matrix(0, nrow = 2, ncol = length(unique(female_grouped_comparison$group)))
+  rownames(contingency_table) <- c("Menopause", "Nicht-Menopause")
+  colnames(contingency_table) <- unique(female_grouped_comparison$group)
+
+  # Füllen der Kontingenztabelle
+  for (i in 1:nrow(female_grouped_comparison)) {
+    row_idx <- ifelse(female_grouped_comparison$status[i] == "Menopause", 1, 2)
+    col_idx <- which(colnames(contingency_table) == female_grouped_comparison$group[i])
+    contingency_table[row_idx, col_idx] <- female_grouped_comparison$usage[i]
+  }
+
+  # Führe Chi-Quadrat-Test durch
+  print("Kontingenztabelle (nur weibliche Patientinnen):")
+  print(contingency_table)
+
+  # Prüfe, ob genügend Daten für den Test vorhanden sind
+  expected <- chisq.test(contingency_table)$expected
+  if (min(expected) < 5) {
+    print("Warnung: Einige erwartete Häufigkeiten sind kleiner als 5, was die Zuverlässigkeit des Tests beeinträchtigen kann.")
+  }
+
+
+  chisq_result <- chisq.test(contingency_table)
+
+  residuals <- chisq_result$residuals
+
+  # Visualisierung der standardisierten Residuen
+  print("Standardisierte Residuen:")
+  print(residuals)
+  return(chisq_result)
+}
+
+# Test für weibliche Patientinnen ausführen
+female_group_chisq_result <- chisq_test_females_only()
+print(female_group_chisq_result)
+
+# Einen Barplot der standardisierten Residuen erstellen
+plot_residuals_bar <- function() {
+  # Test durchführen, um die Residuen zu erhalten
+  chisq_result <- chisq_test_females_only()
+  residuals <- chisq_result$residuals
+
+  # Residuen in einen Dataframe umwandeln
+  resid_df <- as.data.frame(as.table(residuals))
+  names(resid_df) <- c("Status", "Gruppe", "Residual")
+
+  # Signifikanzgrenze markieren
+  significance_level <- 1.96
+  resid_df$Signifikant <- abs(resid_df$Residual) > significance_level
+
+  # Plot erstellen
+  ggplot(resid_df, aes(x = Gruppe, y = Residual, fill = Status)) +
+    geom_col(position = position_dodge()) +
+    geom_hline(
+      yintercept = c(-significance_level, significance_level),
+      linetype = "dashed", color = "red"
+    ) +
+    labs(
+      title = "Standardisierte Residuen pro Medikamentengruppe",
+      subtitle = paste(
+        "Chi-Quadrat =", round(chisq_result$statistic, 2),
+        ", p-Wert =", round(chisq_result$p.value, 4)
+      ),
+      x = "Medikamentengruppe", y = "Standardisiertes Residual"
+    ) +
+    scale_fill_manual(values = c("Menopause" = "darkred", "Nicht-Menopause" = "darkgreen")) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+plot_residuals_bar()
