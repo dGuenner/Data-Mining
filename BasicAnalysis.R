@@ -1,3 +1,4 @@
+# nolint start
 ### Main (angeben welche Plot-Funktion ausgeführt werden soll):
 # agedistributionBinwidth1()
 # agedistributionBinwidth5()
@@ -100,7 +101,7 @@ library(patchwork)
 
 ### Initialisiere Variablen
 ## Festlegen welche Visite
-curAllPatients <- PatientenV1
+curAllPatients <- PatientenV15
 ## Festlegen von wann bis wann Wechseljahre
 menopauseStart <- 45
 menopauseEnd <- 55
@@ -355,7 +356,7 @@ initializeVariables <- function() {
   result <<- getUniqueMedicationUsage(enhancedPatients)
   uniqueMedsGeneral <<- result[[1]][result[[1]]$medication != "0", ]
   uniqueMedsMenopause <<- result[[2]][result[[2]]$medication != "0", ]
-  uniqueMedsNotMenopasue <<- result[[3]][result[[3]]$medication != "0", ]
+  uniqueMedsNotMenopause <<- result[[3]][result[[3]]$medication != "0", ]
 
   # Erstelle ein kombiniertes Dataframe für Vergleiche und entferne die "Sonstige" Gruppe
   grouped_comparison <<- rbind(
@@ -679,7 +680,7 @@ averageProphylaxisEffectByAge2 <- function() {
 # Durschnitts Phrophylaxe Dosierung pro 10 Jahre Altersgruppe
 averageProphylaxisDosageBy10YearAgeGroup <- function() {
   filteredPatients <- enhancedPatients %>%
-  filter(!is.na(ageGroup10))
+    filter(!is.na(ageGroup10))
   avgDosageByAgeGroup <- filteredPatients %>%
     group_by(ageGroup10) %>%
     summarise(
@@ -771,7 +772,7 @@ averageProphylaxisDosageByAge2 <- function() {
 # Durschnitts Prophylaxe Tolerability pro 10 Jahre Altersgruppe
 averageProphylaxisTolerabilityBy10YearAgeGroup <- function() {
   filteredPatients <- enhancedPatients %>%
-  filter(!is.na(ageGroup10))
+    filter(!is.na(ageGroup10))
   avgTolerabilityByAgeGroup <- filteredPatients %>%
     group_by(ageGroup10) %>%
     summarise(
@@ -993,7 +994,7 @@ plotMedicationUsageMenopause <- function() {
 
 # Plot für Medikamentennutzung außerhalb der Wechseljahre
 plotMedicationUsageNotMenopause <- function() {
-  ggplot(uniqueMedsNotMenopasue, aes(x = medication, y = usage)) +
+  ggplot(uniqueMedsNotMenopause, aes(x = medication, y = usage)) +
     geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
     labs(title = "Medikamentenverwendung außerhalb Wechseljahre", x = "Medikament", y = "Verwendung") +
@@ -1080,93 +1081,4 @@ plotMedicationGroupsComparisonAbsAndPercent <- function() {
   plotAbs / plotPercent + plot_layout(ncol = 1)
 }
 
-# Chi-Quadrat-Test nur für weibliche Patientinnen
-chisq_test_females_only <- function() {
-  # Weibliche Patientinnen filtern
-  female_patients <- enhancedPatients %>% filter(gender == "weiblich", ageGroup10 != "Sonstige")
-
-  # Medikamentendaten für weibliche Patientinnen berechnen
-  female_grouped_results <- getUniqueMedicationGroupsUsage(female_patients, med_groups)
-
-  # Extrahiere die nach Gruppen aggregierten Daten
-  female_groupedMedsMenopause <- female_grouped_results$byGroup[[2]]
-  female_groupedMedsNotMenopause <- female_grouped_results$byGroup[[3]]
-
-  # Erstelle ein kombiniertes Dataframe für Vergleiche und entferne die "Sonstige" Gruppe
-  female_grouped_comparison <- rbind(
-    transform(female_groupedMedsMenopause, status = "Menopause"),
-    transform(female_groupedMedsNotMenopause, status = "Nicht-Menopause")
-  )
-  female_grouped_comparison <- female_grouped_comparison[female_grouped_comparison$group != "Sonstige", ]
-
-  # Erstelle die Kontingenztabelle
-  contingency_table <- matrix(0, nrow = 2, ncol = length(unique(female_grouped_comparison$group)))
-  rownames(contingency_table) <- c("Menopause", "Nicht-Menopause")
-  colnames(contingency_table) <- unique(female_grouped_comparison$group)
-
-  # Füllen der Kontingenztabelle
-  for (i in 1:nrow(female_grouped_comparison)) {
-    row_idx <- ifelse(female_grouped_comparison$status[i] == "Menopause", 1, 2)
-    col_idx <- which(colnames(contingency_table) == female_grouped_comparison$group[i])
-    contingency_table[row_idx, col_idx] <- female_grouped_comparison$usage[i]
-  }
-
-  # Führe Chi-Quadrat-Test durch
-  print("Kontingenztabelle (nur weibliche Patientinnen):")
-  print(contingency_table)
-
-  # Prüfe, ob genügend Daten für den Test vorhanden sind
-  expected <- chisq.test(contingency_table)$expected
-  if (min(expected) < 5) {
-    print("Warnung: Einige erwartete Häufigkeiten sind kleiner als 5, was die Zuverlässigkeit des Tests beeinträchtigen kann.")
-  }
-
-
-  chisq_result <- chisq.test(contingency_table)
-
-  residuals <- chisq_result$residuals
-
-  # Visualisierung der standardisierten Residuen
-  print("Standardisierte Residuen:")
-  print(residuals)
-  return(chisq_result)
-}
-
-# Test für weibliche Patientinnen ausführen
-female_group_chisq_result <- chisq_test_females_only()
-print(female_group_chisq_result)
-
-# Einen Barplot der standardisierten Residuen erstellen
-plot_residuals_bar <- function() {
-  # Test durchführen, um die Residuen zu erhalten
-  chisq_result <- chisq_test_females_only()
-  residuals <- chisq_result$residuals
-
-  # Residuen in einen Dataframe umwandeln
-  resid_df <- as.data.frame(as.table(residuals))
-  names(resid_df) <- c("Status", "Gruppe", "Residual")
-
-  # Signifikanzgrenze markieren
-  significance_level <- 1.96
-  resid_df$Signifikant <- abs(resid_df$Residual) > significance_level
-
-  # Plot erstellen
-  ggplot(resid_df, aes(x = Gruppe, y = Residual, fill = Status)) +
-    geom_col(position = position_dodge()) +
-    geom_hline(
-      yintercept = c(-significance_level, significance_level),
-      linetype = "dashed", color = "red"
-    ) +
-    labs(
-      title = "Standardisierte Residuen pro Medikamentengruppe",
-      subtitle = paste(
-        "Chi-Quadrat =", round(chisq_result$statistic, 2),
-        ", p-Wert =", round(chisq_result$p.value, 4)
-      ),
-      x = "Medikamentengruppe", y = "Standardisiertes Residual"
-    ) +
-    scale_fill_manual(values = c("Menopause" = "darkred", "Nicht-Menopause" = "darkgreen")) +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))
-}
-plot_residuals_bar()
+# nolint end
