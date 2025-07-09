@@ -34,16 +34,21 @@
 # abortedProphylaxisMedAmountDistributionByGenderRelativ()
 # abortedProphylaxisMedAmountDistributionByGenderAbsolute()
 
+### Statistische Tests
+# testProphylaxisMedicationByMenopause()
+# testProphylaxisMedicationByMenopauseWilcoxon()
 ### Plots zur Medikamentenverteilung
 
 # plotMedicationUsageGeneral()
-# plotMedicationUsageMenopause()
-# plotMedicationUsageNotMenopause()
 # plotMedicationUsageComparison()
+# plotMedicationUsageAgeGroups()
+# plotMedicationUsageAgeGroup1()
+# plotMedicationUsageAgeGroup2()
+# plotMedicationUsageAgeGroup3()
+# plotMedicationUsageAllAgeGroups()
 # plotMedicationGroupsGeneral()
-# plotMedicationGroupsMenopause()
-# plotMedicationGroupsNotMenopause()
 # plotMedicationGroupsComparison()
+# plotMedicationGroupsAllAgeGroups()
 # plotMedicationGroupsComparisonPercent()
 # plotMedicationGroupsComparisonAbsAndPercent()
 
@@ -101,7 +106,8 @@ library(patchwork)
 
 ### Initialisiere Variablen
 ## Festlegen welche Visite
-curAllPatients <- PatientenV15
+curAllPatients <- PatientenV2
+
 ## Festlegen von wann bis wann Wechseljahre
 menopauseStart <- 45
 menopauseEnd <- 55
@@ -123,7 +129,7 @@ enhanceData <- function(patients) {
 
   patients$birthyear <- as.numeric(patients$birthyear)
   patients$age <- as.numeric(format(as.Date(patients[, grep("^date_dc_K\\d{1,2}$", names(patients))]), "%Y")) - patients$birthyear
-  patients$menopause <- patients$age < menopauseEnd & patients$age > menopauseStart
+  patients$menopause <- patients$age < menopauseEnd & patients$age >= menopauseStart
   patients$prophylaxeMed <- patients[prophylaxeMedNameColumns[1]] != "0"
   patients$nProphylaxeMed <- rowSums(patients[, prophylaxeMedNameColumns] != "0")
   patients$abortedProphylaxeMed <- patients[prophylaxeAbortedMedNameColumns[1]] != "0"
@@ -418,10 +424,30 @@ enhancedPatients$ageGroup10 <- cut(
 ## Visualisierung der Altersverteilung
 # agedistribution binwidth 1
 agedistributionBinwidth1 <- function() {
-  ggplot(enhancedPatients, aes(x = age, fill = menopause)) +
+  # Erstelle eine neue Variable für die Füllfarbe:
+  enhancedPatients$menopause_status <- ifelse(
+    enhancedPatients$menopause,
+    "Wechseljahre",
+    ifelse(!is.na(enhancedPatients$ageGroup10), "Nicht-Wechseljahre (in ageGroup10)", "Nicht-Wechseljahre (außerhalb ageGroup10)")
+  )
+
+  ggplot(enhancedPatients, aes(x = age, fill = menopause_status)) +
     geom_histogram(binwidth = 1, color = "white") +
-    scale_fill_manual(values = c("steelblue", "darkgreen")) +
-    labs(title = "Altersverteilung", x = "Alter", y = "Anzahl Personen", fill = "Wechseljahre") +
+    scale_fill_manual(
+      values = c(
+        "Wechseljahre" = "darkgreen",
+        "Nicht-Wechseljahre (in ageGroup10)" = "orange",
+        "Nicht-Wechseljahre (außerhalb ageGroup10)" = "steelblue"
+      ),
+      breaks = c("Wechseljahre", "Nicht-Wechseljahre (in ageGroup10)", "Nicht-Wechseljahre (außerhalb ageGroup10)"),
+      labels = c("Wechseljahre", "Nicht-Wechseljahre (in ageGroup10)", "Nicht-Wechseljahre (außerhalb ageGroup10)")
+    ) +
+    labs(
+      title = "Altersverteilung",
+      x = "Alter",
+      y = "Anzahl Personen",
+      fill = "Status"
+    ) +
     theme_minimal()
 }
 
@@ -480,18 +506,118 @@ prophylaxisMedicationDistribution <- function() {
 
 # nach Wechelsjahren
 prophylaxisMedicationDistributionByMenopause <- function() {
-  ggplot(enhancedPatients, aes(x = prophylaxeMed, fill = prophylaxeMed)) +
+  # Filtere NA Werte
+  filtered_data <- enhancedPatients[!is.na(enhancedPatients$ageGroup10), ]
+
+  # Erstelle numerische Variable für Prophylaxemedikation (0 = nein, 1 = ja)
+  filtered_data$prophylaxeMed_numeric <- as.numeric(filtered_data$prophylaxeMed)
+
+  # Extrahiere die drei Gruppen
+  groups <- levels(as.factor(filtered_data$ageGroup10))
+
+  # Führe paarweise Mann-Whitney-U-Tests durch
+  group_combinations <- combn(groups, 2, simplify = FALSE)
+  p_values <- c()
+  comparison_names <- c()
+
+  for (i in seq_along(group_combinations)) {
+    group1 <- group_combinations[[i]][1]
+    group2 <- group_combinations[[i]][2]
+
+    # Extrahiere Daten für beide Gruppen
+    data1 <- filtered_data[filtered_data$ageGroup10 == group1, "prophylaxeMed_numeric"]
+    data2 <- filtered_data[filtered_data$ageGroup10 == group2, "prophylaxeMed_numeric"]
+
+    # Entferne NA Werte
+    data1 <- data1[!is.na(data1)]
+    data2 <- data2[!is.na(data2)]
+
+    # Führe Mann-Whitney-U-Test durch
+    if (length(data1) > 0 && length(data2) > 0) {
+      wilcox_test <- wilcox.test(data1, data2, exact = FALSE)
+      p_values <- c(p_values, wilcox_test$p.value)
+      comparison_names <- c(comparison_names, paste(group1, "vs", group2))
+    }
+  }
+
+  # Bonferroni-Korrektur
+  adjusted_p_values <- p.adjust(p_values, method = "bonferroni")
+
+  # Erstelle Signifikanz-Notationen für jede Gruppe
+  # Für jede Gruppe sammeln wir alle relevanten p-Werte
+  group_significance <- list()
+
+  for (group in groups) {
+    # Finde alle Vergleiche, die diese Gruppe betreffen
+    group_p_values <- c()
+    for (i in seq_along(group_combinations)) {
+      if (group %in% group_combinations[[i]]) {
+        group_p_values <- c(group_p_values, adjusted_p_values[i])
+      }
+    }
+
+    # Nimm den niedrigsten (bedeutsamsten) p-Wert für diese Gruppe
+    min_p <- min(group_p_values, na.rm = TRUE)
+
+    # Bestimme Signifikanz-Notation
+    if (min_p < 0.001) {
+      group_significance[[group]] <- "***"
+    } else if (min_p < 0.01) {
+      group_significance[[group]] <- "**"
+    } else if (min_p < 0.05) {
+      group_significance[[group]] <- "*"
+    } else {
+      group_significance[[group]] <- "n.s."
+    }
+  }
+
+  # Berechne maximale Balkenhöhe für jede Gruppe für Annotation-Positionierung
+  count_data <- filtered_data %>%
+    group_by(ageGroup10, prophylaxeMed) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(ageGroup10) %>%
+    summarise(max_count = max(count), .groups = "drop")
+
+  # Erstelle Annotations-Dataframe
+  annotations <- data.frame(
+    ageGroup10 = groups,
+    significance = sapply(groups, function(g) group_significance[[g]]),
+    y_pos = sapply(groups, function(g) {
+      max_count <- count_data$max_count[count_data$ageGroup10 == g]
+      if (length(max_count) > 0) max_count + max_count * 0.1 else 1
+    }),
+    stringsAsFactors = FALSE
+  )
+
+  ggplot(filtered_data, aes(x = prophylaxeMed, fill = prophylaxeMed)) +
     geom_bar(stat = "count", color = "white") +
-    scale_fill_manual(values = c("steelblue", "darkgreen")) +
-    facet_wrap(~menopause) +
+    scale_fill_manual(
+      values = c("steelblue", "darkgreen"),
+      labels = c("FALSE" = "Nein", "TRUE" = "Ja"),
+      name = "Prophylaxemedikation"
+    ) +
+    facet_wrap(~ageGroup10) +
+    # Füge Signifikanz-Annotationen hinzu
+    geom_text(
+      data = annotations,
+      aes(x = 1.5, y = y_pos, label = significance),
+      inherit.aes = FALSE,
+      size = 4,
+      fontface = "bold",
+      color = "red"
+    ) +
     labs(
-      title = "Verteilung von Prophlaxemedikamenten nach Wechseljahren",
+      title = "Verteilung von Prophylaxemedikamenten nach Altersgruppen",
       x = "Prophylaxemedikation",
       y = "Anzahl"
     ) +
     geom_text(aes(label = after_stat(count)), stat = "count", position = position_stack(vjust = 0.5)) +
     scale_x_discrete(labels = c("TRUE" = "Ja", "FALSE" = "Nein")) +
-    theme_minimal()
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 11, hjust = 0.5),
+      strip.text = element_text(size = 10)
+    )
 }
 
 prophylaxisMedicationDistributionByAge <- function() {
@@ -546,22 +672,40 @@ prophylaxisMedicationAmountDistribution <- function() {
     theme_minimal()
 }
 
-# Nach Wechseljahren %
+# Nach Altersgruppe %
 prophylaxisMedicationAmountDistributionByMenopauseRelativ <- function() {
-  ggplot(enhancedPatients, aes(x = nProphylaxeMed)) +
-    facet_wrap(~menopause) +
+  # Filter patients with valid ageGroup10 data
+  filteredPatients <- enhancedPatients %>%
+    filter(!is.na(ageGroup10))
+
+  ggplot(filteredPatients, aes(x = nProphylaxeMed)) +
+    facet_wrap(~ageGroup10, scales = "free") +
     geom_histogram(aes(y = after_stat(density)), binwidth = 1, fill = "steelblue", color = "white") +
-    labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
+    labs(
+      title = "Verteilung Anzahl Prophylaxemedikamente nach Altersgruppe",
+      x = "Anzahl Prophylaxe Medikamente",
+      y = "Prozent der Patienten"
+    ) +
+    scale_x_continuous(breaks = function(x) seq(floor(min(x)), ceiling(max(x)), by = 1)) +
     theme_minimal()
 }
 
-# Nach Wechseljahren absolut
+# Nach Altersgruppe absolut
 prophylaxisMedicationAmountDistributionByMenopauseAbsolute <- function() {
-  ggplot(enhancedPatients, aes(x = nProphylaxeMed)) +
-    facet_wrap(~menopause) +
+  # Filter patients with valid ageGroup10 data
+  filteredPatients <- enhancedPatients %>%
+    filter(!is.na(ageGroup10))
+
+  ggplot(filteredPatients, aes(x = nProphylaxeMed)) +
+    facet_wrap(~ageGroup10, scales = "free") +
     geom_histogram(aes(y = after_stat(count)), binwidth = 1, fill = "steelblue", color = "white") +
-    labs(title = "Verteilung Anzahl Prophylaxemedikamente", x = "Anzahl Prophylaxe Medikamente", y = "Prozent der Patienten") +
+    labs(
+      title = "Verteilung Anzahl Prophylaxemedikamente nach Altersgruppe",
+      x = "Anzahl Prophylaxe Medikamente",
+      y = "Anzahl der Patienten"
+    ) +
     geom_text(aes(label = after_stat(count)), stat = "count", position = position_stack(vjust = 0.5), size = 3.0, angle = 90) +
+    scale_x_continuous(breaks = function(x) seq(floor(min(x)), ceiling(max(x)), by = 1)) +
     theme_minimal()
 }
 
@@ -982,31 +1126,95 @@ plotMedicationUsageGeneral <- function() {
     scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
 }
 
-# Plot für Medikamentennutzung in Wechseljahren
-plotMedicationUsageMenopause <- function() {
-  ggplot(uniqueMedsMenopause, aes(x = medication, y = usage)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    coord_flip() +
-    labs(title = "Medikamentenverwendung in Wechseljahren", x = "Medikament", y = "Verwendung") +
-    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
-    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+# Plot für Medikamentennutzung nach Altersgruppen
+plotMedicationUsageAgeGroups <- function() {
+  # Erstelle Daten für alle Altersgruppen
+  ageGroups <- unique(enhancedPatients$ageGroup10[!is.na(enhancedPatients$ageGroup10)])
+
+  # Ermittle alle verfügbaren Medikamente aus allen Daten
+  columns <- grep("preventive_name_p", names(enhancedPatients), value = TRUE)
+  allMeds <- unlist(lapply(enhancedPatients[, columns], function(x) as.character(x)))
+  allMeds <- sort(unique(allMeds))
+  allMeds <- allMeds[allMeds != "0"] # Entferne "0" aus der Liste
+
+  plots <- list()
+
+  for (ageGroup in ageGroups) {
+    # Filtere Daten für diese Altersgruppe
+    ageGroupData <- enhancedPatients %>% filter(ageGroup10 == ageGroup)
+
+    # Berechne Medikamentennutzung für diese Altersgruppe
+    meds_each_column <- list()
+    for (column in columns) {
+      freqMeds <- plyr::count(ageGroupData, column)
+      meds_each_column <- append(meds_each_column, freqMeds)
+    }
+
+    resultAgeGroup <- as.data.frame(transformMedicationData(meds_each_column))
+    resultAgeGroup <- resultAgeGroup[resultAgeGroup$medication != "0", ]
+
+    # Füge fehlende Medikamente mit 0 Verwendung hinzu
+    missing_medications <- setdiff(allMeds, resultAgeGroup$medication)
+    if (length(missing_medications) > 0) {
+      missing_df <- data.frame(
+        medication = missing_medications,
+        usage = rep(0, length(missing_medications))
+      )
+      resultAgeGroup <- rbind(resultAgeGroup, missing_df)
+    }
+
+    # Sortiere nach Medikamentenname für konsistente Darstellung
+    resultAgeGroup <- resultAgeGroup[order(resultAgeGroup$medication), ]
+
+    # Umbreche lange Medikamentennamen
+    resultAgeGroup$medication <- stringr::str_wrap(resultAgeGroup$medication, width = 20)
+
+    # Erstelle Plot für diese Altersgruppe
+    plot <- ggplot(resultAgeGroup, aes(x = medication, y = usage)) +
+      geom_bar(stat = "identity", fill = "steelblue") +
+      coord_flip() +
+      labs(
+        title = stringr::str_wrap(paste("Medikamentenverwendung Altersgruppe", ageGroup), width = 30),
+        x = "Medikament", y = "Verwendung"
+      ) +
+      geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
+      scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(size = 12, hjust = 0.5, margin = margin(b = 10)),
+        axis.text.y = element_text(size = 9),
+        axis.text.x = element_text(size = 9),
+        axis.title = element_text(size = 10)
+      )
+
+    plots[[ageGroup]] <- plot
+  }
+
+  return(plots)
 }
 
-# Plot für Medikamentennutzung außerhalb der Wechseljahre
-plotMedicationUsageNotMenopause <- function() {
-  ggplot(uniqueMedsNotMenopause, aes(x = medication, y = usage)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    coord_flip() +
-    labs(title = "Medikamentenverwendung außerhalb Wechseljahre", x = "Medikament", y = "Verwendung") +
-    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
-    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
-}
-
-# Vergleich der Medikamentennutzung zwischen Wechseljahren und nicht Wechseljahren
+# Vergleich der Medikamentennutzung zwischen allen Altersgruppen
 plotMedicationUsageComparison <- function() {
-  medUsageMenopause <- plotMedicationUsageMenopause()
-  medUsageNotMenopause <- plotMedicationUsageNotMenopause()
-  medUsageMenopause + medUsageNotMenopause + plot_layout(ncol = 2)
+  plots <- plotMedicationUsageAgeGroups()
+
+  if (length(plots) == 0) {
+    return(ggplot() +
+      labs(title = "Keine Daten verfügbar"))
+  }
+
+  # Kombiniere alle Plots in einem Layout
+  if (length(plots) == 1) {
+    return(plots[[1]])
+  } else if (length(plots) == 2) {
+    return(plots[[1]] + plots[[2]] + plot_layout(ncol = 2))
+  } else if (length(plots) == 3) {
+    return(plots[[1]] + plots[[2]] + plots[[3]] + plot_layout(ncol = 3))
+  } else if (length(plots) == 4) {
+    return(plots[[1]] + plots[[2]] + plots[[3]] + plots[[4]] + plot_layout(ncol = 2, nrow = 2))
+  } else {
+    # Für mehr als 4 Plots, verwende wrap_plots
+    return(wrap_plots(plots, ncol = 3))
+  }
 }
 
 # Plot für allgemeine Medikamentengruppen-Verwendung
@@ -1019,31 +1227,122 @@ plotMedicationGroupsGeneral <- function() {
     scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
 }
 
-# Plot für Medikamentengruppen-Verwendung in Wechseljahren
-plotMedicationGroupsMenopause <- function() {
-  ggplot(groupedMedsMenopause, aes(x = group, y = usage)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    coord_flip() +
-    labs(title = "Medikamentengruppen - Wechseljahre", x = "Gruppe", y = "Anzahl") +
-    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
-    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+# Plot für Medikamentengruppen-Verwendung nach Altersgruppen
+plotMedicationGroupsAgeGroups <- function() {
+  # Erstelle Daten für alle Altersgruppen
+  ageGroups <- unique(enhancedPatients$ageGroup10[!is.na(enhancedPatients$ageGroup10)])
+
+  # Ermittle alle verfügbaren Medikamentengruppen
+  allGroups <- names(med_groups)
+
+  plots <- list()
+
+  for (ageGroup in ageGroups) {
+    # Filtere Daten für diese Altersgruppe
+    ageGroupData <- enhancedPatients %>% filter(ageGroup10 == ageGroup)
+
+    # Überprüfe ob genügend Daten vorhanden sind
+    if (nrow(ageGroupData) == 0) {
+      warning(paste("Keine Daten für Altersgruppe", ageGroup))
+      next
+    }
+
+    # Berechne Medikamentengruppen-Nutzung für diese Altersgruppe (vereinfachter Ansatz)
+    tryCatch(
+      {
+        # Hole alle Medikamenten-Spalten
+        columns <- grep("preventive_name_p", names(ageGroupData), value = TRUE)
+
+        # Sammle alle Medikamente aus allen Spalten
+        allMedsInAge <- c()
+        for (column in columns) {
+          meds <- as.character(ageGroupData[[column]])
+          meds <- meds[meds != "0" & !is.na(meds)]
+          allMedsInAge <- c(allMedsInAge, meds)
+        }
+
+        # Zähle die Häufigkeit jedes Medikaments
+        medCounts <- table(allMedsInAge)
+
+        # Erstelle Ergebnis-Dataframe für Gruppen
+        resultAgeGroup <- data.frame(
+          group = allGroups,
+          usage = rep(0, length(allGroups)),
+          stringsAsFactors = FALSE
+        )
+
+        # Zuordnung der Medikamente zu Gruppen
+        for (i in 1:length(allGroups)) {
+          groupName <- allGroups[i]
+          groupMeds <- med_groups[[groupName]]
+
+          # Zähle Verwendung für diese Gruppe
+          groupUsage <- 0
+          for (med in groupMeds) {
+            if (med %in% names(medCounts)) {
+              groupUsage <- groupUsage + medCounts[[med]]
+            }
+          }
+          resultAgeGroup$usage[i] <- groupUsage
+        }
+
+        # Sortiere nach Gruppenname für konsistente Darstellung
+        resultAgeGroup <- resultAgeGroup[order(resultAgeGroup$group), ]
+
+        # Umbreche lange Gruppennamen
+        resultAgeGroup$group <- stringr::str_wrap(resultAgeGroup$group, width = 15)
+
+        # Erstelle Plot für diese Altersgruppe
+        plot <- ggplot(resultAgeGroup, aes(x = group, y = usage)) +
+          geom_bar(stat = "identity", fill = "steelblue") +
+          coord_flip() +
+          labs(
+            title = stringr::str_wrap(paste("Medikamentengruppen Altersgruppe", ageGroup), width = 25),
+            x = "Gruppe", y = "Anzahl"
+          ) +
+          geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
+          scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +
+          theme_minimal() +
+          theme(
+            plot.title = element_text(size = 12, hjust = 0.5, margin = margin(b = 10)),
+            axis.text.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9),
+            axis.title = element_text(size = 10)
+          )
+
+        plots[[ageGroup]] <- plot
+      },
+      error = function(e) {
+        warning(paste("Fehler bei Altersgruppe", ageGroup, ":", e$message))
+      }
+    )
+  }
+
+  return(plots)
 }
 
-# Plot für Medikamentengruppen-Verwendung außerhalb der Wechseljahre
-plotMedicationGroupsNotMenopause <- function() {
-  ggplot(groupedMedsNotMenopause, aes(x = group, y = usage)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    coord_flip() +
-    labs(title = "Medikamentengruppen - Außerhalb Wechseljahre", x = "Gruppe", y = "Anzahl") +
-    geom_text(aes(label = usage), size = 3.0, position = position_stack(), hjust = -0.5) +
-    scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
-}
-
-# Vergleich der Medikamentengruppen-Verwendung
+# Vergleich der Medikamentengruppen-Verwendung zwischen allen Altersgruppen
 plotMedicationGroupsComparison <- function() {
-  medGroupsMenopause <- plotMedicationGroupsMenopause()
-  medGroupsNotMenopause <- plotMedicationGroupsNotMenopause()
-  medGroupsMenopause + medGroupsNotMenopause + plot_layout(ncol = 2)
+  plots <- plotMedicationGroupsAgeGroups()
+
+  if (length(plots) == 0) {
+    return(ggplot() +
+      labs(title = "Keine Daten verfügbar"))
+  }
+
+  # Kombiniere alle Plots in einem Layout
+  if (length(plots) == 1) {
+    return(plots[[1]])
+  } else if (length(plots) == 2) {
+    return(plots[[1]] + plots[[2]] + plot_layout(ncol = 2))
+  } else if (length(plots) == 3) {
+    return(plots[[1]] + plots[[2]] + plots[[3]] + plot_layout(ncol = 3))
+  } else if (length(plots) == 4) {
+    return(plots[[1]] + plots[[2]] + plots[[3]] + plots[[4]] + plot_layout(ncol = 2, nrow = 2))
+  } else {
+    # Für mehr als 4 Plots, verwende wrap_plots
+    return(wrap_plots(plots, ncol = 3))
+  }
 }
 
 # Plot für Vergleich der Medikamentengruppen-Nutzung (absolute Zahlen)
@@ -1081,4 +1380,279 @@ plotMedicationGroupsComparisonAbsAndPercent <- function() {
   plotAbs / plotPercent + plot_layout(ncol = 1)
 }
 
+## Statistische Tests
+# Chi-Quadrat-Test für Prophylaxemedikamentenverteilung nach Menopause
+testProphylaxisMedicationByMenopause <- function() {
+  # Erstelle Kontingenztabelle
+  contingency_table <- table(enhancedPatients$ageGroup10, enhancedPatients$prophylaxeMed)
+
+  # Zeige die Kontingenztabelle an
+  cat("Kontingenztabelle - Menopause vs. Prophylaxemedikation:\n")
+  print(contingency_table)
+  cat("\n")
+
+  # Führe Chi-Quadrat-Test durch
+  chi_test <- chisq.test(contingency_table)
+
+  # Zeige Testergebnisse
+  cat("Chi-Quadrat-Test Ergebnisse:\n")
+  cat("Chi-Quadrat-Statistik:", chi_test$statistic, "\n")
+  cat("Freiheitsgrade:", chi_test$parameter, "\n")
+  cat("p-Wert:", chi_test$p.value, "\n")
+  cat("Signifikanzniveau: α = 0.05\n")
+
+  if (chi_test$p.value < 0.05) {
+    cat("Ergebnis: STATISTISCH SIGNIFIKANT (p < 0.05)\n")
+    cat("Es gibt einen signifikanten Zusammenhang zwischen Menopause-Status und Prophylaxemedikamenteneinnahme.\n")
+  } else {
+    cat("Ergebnis: NICHT STATISTISCH SIGNIFIKANT (p ≥ 0.05)\n")
+    cat("Es gibt keinen signifikanten Zusammenhang zwischen Menopause-Status und Prophylaxemedikamenteneinnahme.\n")
+  }
+
+  # Zusätzliche Informationen
+  cat("\nZusätzliche Informationen:\n")
+
+  # Erwartete Häufigkeiten
+  cat("Erwartete Häufigkeiten:\n")
+  print(chi_test$expected)
+
+  # Cramér's V (Effektgröße)
+  n <- sum(contingency_table)
+  cramers_v <- sqrt(chi_test$statistic / (n * (min(dim(contingency_table)) - 1)))
+  cat("\nCramér's V (Effektgröße):", cramers_v, "\n")
+
+  if (cramers_v < 0.1) {
+    cat("Effektgröße: KLEIN\n")
+  } else if (cramers_v < 0.3) {
+    cat("Effektgröße: MITTEL\n")
+  } else {
+    cat("Effektgröße: GROSS\n")
+  }
+
+  # Proportionen berechnen und anzeigen
+  cat("\nProportionen:\n")
+  prop_table <- prop.table(contingency_table, margin = 1) * 100
+  print(round(prop_table, 1))
+
+  return(list(
+    contingency_table = contingency_table,
+    chi_test = chi_test,
+    cramers_v = cramers_v,
+    proportions = prop_table
+  ))
+}
+
+# Mann-Whitney-U-Tests (Wilcoxon) für paarweise Vergleiche zwischen Altersgruppen
+testProphylaxisMedicationByMenopauseWilcoxon <- function() {
+  cat("=== MANN-WHITNEY-U-TESTS (WILCOXON) FÜR ALTERSGRUPPEN ===\n\n")
+
+  # Filtere NA Werte
+  filtered_data <- enhancedPatients[!is.na(enhancedPatients$ageGroup10), ]
+
+  # Erstelle numerische Variable für Prophylaxemedikation (0 = nein, 1 = ja)
+  filtered_data$prophylaxeMed_numeric <- as.numeric(filtered_data$prophylaxeMed)
+
+  # Berechne Anzahl der Prophylaxemedikamente pro Patient
+  # (falls diese Variable bereits existiert, sonst verwende prophylaxeMed_numeric)
+  if ("medCount" %in% names(filtered_data)) {
+    test_variable <- "medCount"
+    variable_name <- "Anzahl der Medikamente"
+  } else {
+    test_variable <- "prophylaxeMed_numeric"
+    variable_name <- "Prophylaxemedikation (binär)"
+  }
+
+  # Extrahiere die drei Gruppen
+  groups <- levels(as.factor(filtered_data$ageGroup10))
+  cat("Analysierte Altersgruppen:", paste(groups, collapse = ", "), "\n")
+  cat("Analysierte Variable:", variable_name, "\n\n")
+
+  # Erstelle alle möglichen Paarkombinationen
+  group_combinations <- combn(groups, 2, simplify = FALSE)
+
+  # Speichere Ergebnisse
+  results <- list()
+  p_values <- c()
+
+  for (i in seq_along(group_combinations)) {
+    group1 <- group_combinations[[i]][1]
+    group2 <- group_combinations[[i]][2]
+
+    cat("--- Vergleich:", group1, "vs.", group2, "---\n")
+
+    # Extrahiere Daten für beide Gruppen
+    data1 <- filtered_data[filtered_data$ageGroup10 == group1, test_variable]
+    data2 <- filtered_data[filtered_data$ageGroup10 == group2, test_variable]
+
+    # Entferne NA Werte
+    data1 <- data1[!is.na(data1)]
+    data2 <- data2[!is.na(data2)]
+
+    cat("Gruppengröße", group1, ":", length(data1), "\n")
+    cat("Gruppengröße", group2, ":", length(data2), "\n")
+
+    # Berechne deskriptive Statistiken
+    cat("Median", group1, ":", round(median(data1), 3), "\n")
+    cat("Median", group2, ":", round(median(data2), 3), "\n")
+    cat("Mittelwert", group1, ":", round(mean(data1), 3), "\n")
+    cat("Mittelwert", group2, ":", round(mean(data2), 3), "\n")
+
+    # Führe Mann-Whitney-U-Test durch
+    if (length(data1) > 0 && length(data2) > 0) {
+      wilcox_test <- wilcox.test(data1, data2, exact = FALSE)
+
+      cat("Mann-Whitney-U-Test Ergebnisse:\n")
+      cat("W-Statistik:", wilcox_test$statistic, "\n")
+      cat("p-Wert:", round(wilcox_test$p.value, 6), "\n")
+
+      # Effektgröße (r = Z / sqrt(N))
+      # Für approximative Berechnung verwenden wir den p-Wert
+      n1 <- length(data1)
+      n2 <- length(data2)
+      total_n <- n1 + n2
+
+      # Approximative Z-Statistik aus p-Wert berechnen
+      if (wilcox_test$p.value > 0) {
+        z_score <- qnorm(wilcox_test$p.value / 2, lower.tail = FALSE)
+        effect_size_r <- z_score / sqrt(total_n)
+        cat("Effektgröße (r):", round(effect_size_r, 3), "\n")
+
+        if (effect_size_r < 0.1) {
+          cat("Effektgröße: KLEIN\n")
+        } else if (effect_size_r < 0.3) {
+          cat("Effektgröße: MITTEL\n")
+        } else {
+          cat("Effektgröße: GROSS\n")
+        }
+      }
+
+      # Speichere p-Wert für Bonferroni-Korrektur
+      p_values <- c(p_values, wilcox_test$p.value)
+
+      # Speichere Ergebnisse
+      results[[paste(group1, "vs", group2)]] <- list(
+        group1 = group1,
+        group2 = group2,
+        n1 = n1,
+        n2 = n2,
+        median1 = median(data1),
+        median2 = median(data2),
+        mean1 = mean(data1),
+        mean2 = mean(data2),
+        test_result = wilcox_test,
+        effect_size_r = if (exists("effect_size_r")) effect_size_r else NA
+      )
+    } else {
+      cat("WARNUNG: Eine oder beide Gruppen sind leer!\n")
+    }
+
+    cat("\n")
+  }
+
+  # Bonferroni-Korrektur
+  cat("=== BONFERRONI-KORREKTUR ===\n")
+  cat("Anzahl Tests:", length(p_values), "\n")
+  cat("Korrigiertes Signifikanzniveau:", 0.05 / length(p_values), "\n\n")
+
+  adjusted_p_values <- p.adjust(p_values, method = "bonferroni")
+
+  cat("ZUSAMMENFASSUNG DER ERGEBNISSE:\n")
+  cat("Vergleich\t\t\tOriginal p\tKorrigiert p\tSignifikant (α=0.05)\n")
+  cat("================================================================================\n")
+
+  for (i in seq_along(group_combinations)) {
+    group1 <- group_combinations[[i]][1]
+    group2 <- group_combinations[[i]][2]
+    comparison_name <- paste(group1, "vs", group2)
+
+    original_p <- round(p_values[i], 6)
+    adjusted_p <- round(adjusted_p_values[i], 6)
+    significant <- if (adjusted_p_values[i] < 0.05) "JA" else "NEIN"
+
+    cat(sprintf("%-25s\t%.6f\t%.6f\t%s\n", comparison_name, original_p, adjusted_p, significant))
+  }
+
+  cat("\n")
+
+  # Interpretation
+  significant_comparisons <- sum(adjusted_p_values < 0.05)
+  cat("INTERPRETATION:\n")
+  cat("Anzahl signifikanter Vergleiche (nach Bonferroni-Korrektur):", significant_comparisons, "von", length(p_values), "\n")
+
+  if (significant_comparisons > 0) {
+    cat("Es gibt signifikante Unterschiede zwischen den Altersgruppen bzgl.", variable_name, "\n")
+  } else {
+    cat("Es gibt keine signifikanten Unterschiede zwischen den Altersgruppen bzgl.", variable_name, "\n")
+  }
+
+  return(list(
+    results = results,
+    p_values = p_values,
+    adjusted_p_values = adjusted_p_values,
+    variable_tested = variable_name
+  ))
+}
+
+# Individuelle Funktionen für jede Altersgruppe (Medikamentengruppen)
+plotMedicationGroupsAgeGroup1 <- function() {
+  plots <- plotMedicationGroupsAgeGroups()
+  if (length(plots) > 0) {
+    return(plots[[1]])
+  } else {
+    return(ggplot() +
+      labs(title = "Keine Daten verfügbar"))
+  }
+}
+
+plotMedicationGroupsAgeGroup2 <- function() {
+  plots <- plotMedicationGroupsAgeGroups()
+  if (length(plots) > 1) {
+    return(plots[[2]])
+  } else {
+    return(ggplot() +
+      labs(title = "Keine Daten verfügbar"))
+  }
+}
+
+plotMedicationGroupsAgeGroup3 <- function() {
+  plots <- plotMedicationGroupsAgeGroups()
+  if (length(plots) > 2) {
+    return(plots[[3]])
+  } else {
+    return(ggplot() +
+      labs(title = "Keine Daten verfügbar"))
+  }
+}
+
+# Funktion um alle drei Altersgruppen-Plots zu zeigen (Medikamentengruppen)
+plotMedicationGroupsAllAgeGroups <- function() {
+  plots <- plotMedicationGroupsAgeGroups()
+
+  if (length(plots) == 0) {
+    return(ggplot() +
+      labs(title = "Keine Daten verfügbar"))
+  }
+
+  # Zeige die ersten drei Plots
+  plot1 <- if (length(plots) > 0) {
+    plots[[1]]
+  } else {
+    ggplot() +
+      labs(title = "Keine Daten")
+  }
+  plot2 <- if (length(plots) > 1) {
+    plots[[2]]
+  } else {
+    ggplot() +
+      labs(title = "Keine Daten")
+  }
+  plot3 <- if (length(plots) > 2) {
+    plots[[3]]
+  } else {
+    ggplot() +
+      labs(title = "Keine Daten")
+  }
+
+  return(plot1 + plot2 + plot3 + plot_layout(ncol = 3))
+}
 # nolint end
