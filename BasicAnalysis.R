@@ -45,7 +45,6 @@
 # plotMedicationUsageAgeGroup1()
 # plotMedicationUsageAgeGroup2()
 # plotMedicationUsageAgeGroup3()
-# plotMedicationUsageAllAgeGroups()
 # plotMedicationGroupsGeneral()
 # plotMedicationGroupsComparison()
 # plotMedicationGroupsAllAgeGroups()
@@ -106,7 +105,7 @@ library(patchwork)
 
 ### Initialisiere Variablen
 ## Festlegen welche Visite
-curAllPatients <- PatientenV2
+curAllPatients <- PatientenV1
 
 ## Festlegen von wann bis wann Wechseljahre
 menopauseStart <- 45
@@ -428,7 +427,7 @@ agedistributionBinwidth1 <- function() {
   enhancedPatients$menopause_status <- ifelse(
     enhancedPatients$menopause,
     "Wechseljahre",
-    ifelse(!is.na(enhancedPatients$ageGroup10), "Nicht-Wechseljahre (in ageGroup10)", "Nicht-Wechseljahre (außerhalb ageGroup10)")
+    ifelse(!is.na(enhancedPatients$ageGroup10), "Nicht-Wechseljahre\n(in ageGroup10)", "Nicht-Wechseljahre\n(außerhalb ageGroup10)")
   )
 
   ggplot(enhancedPatients, aes(x = age, fill = menopause_status)) +
@@ -436,11 +435,11 @@ agedistributionBinwidth1 <- function() {
     scale_fill_manual(
       values = c(
         "Wechseljahre" = "darkgreen",
-        "Nicht-Wechseljahre (in ageGroup10)" = "orange",
-        "Nicht-Wechseljahre (außerhalb ageGroup10)" = "steelblue"
+        "Nicht-Wechseljahre\n(in ageGroup10)" = "orange",
+        "Nicht-Wechseljahre\n(außerhalb ageGroup10)" = "steelblue"
       ),
-      breaks = c("Wechseljahre", "Nicht-Wechseljahre (in ageGroup10)", "Nicht-Wechseljahre (außerhalb ageGroup10)"),
-      labels = c("Wechseljahre", "Nicht-Wechseljahre (in ageGroup10)", "Nicht-Wechseljahre (außerhalb ageGroup10)")
+      breaks = c("Wechseljahre", "Nicht-Wechseljahre\n(in ageGroup10)", "Nicht-Wechseljahre\n(außerhalb ageGroup10)"),
+      labels = c("Wechseljahre", "Nicht-Wechseljahre\n(in ageGroup10)", "Nicht-Wechseljahre\n(außerhalb ageGroup10)")
     ) +
     labs(
       title = "Altersverteilung",
@@ -508,6 +507,7 @@ prophylaxisMedicationDistribution <- function() {
 prophylaxisMedicationDistributionByMenopause <- function() {
   # Filtere NA Werte
   filtered_data <- enhancedPatients[!is.na(enhancedPatients$ageGroup10), ]
+  # <- filtered_data[filtered_data$gender == "weiblich", ]
 
   # Erstelle numerische Variable für Prophylaxemedikation (0 = nein, 1 = ja)
   filtered_data$prophylaxeMed_numeric <- as.numeric(filtered_data$prophylaxeMed)
@@ -617,7 +617,8 @@ prophylaxisMedicationDistributionByMenopause <- function() {
     theme(
       plot.title = element_text(size = 11, hjust = 0.5),
       strip.text = element_text(size = 10)
-    )
+    ) +
+    guides(fill = "none")
 }
 
 prophylaxisMedicationDistributionByAge <- function() {

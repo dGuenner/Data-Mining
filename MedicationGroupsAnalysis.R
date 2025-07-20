@@ -257,7 +257,6 @@ create_contingency_plot <- function(test_result) {
             fill = "Altersgruppe"
         ) +
         theme_minimal() +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
         scale_fill_brewer(type = "qual", palette = "Set3")
 
     return(add_statistical_annotation(base_plot, test_result))
@@ -315,131 +314,325 @@ create_detailed_test_summary <- function() {
     }
 }
 
-# Hauptfunktion für vollständige Analyse
-run_complete_medication_analysis <- function() {
-    cat("=== VOLLSTÄNDIGE MEDIKAMENTENANALYSE MIT STATISTIKEN ===\n\n")
+# Funktion für Post-hoc-Analyse bei signifikanten Chi-Quadrat-Tests
+perform_posthoc_analysis <- function(test_result) {
+    if (is.null(test_result) || !test_result$is_significant) {
+        return(NULL)
+    }
 
-    # 1. Führe alle Tests durch
-    test_results <- perform_medication_chisq_tests()
+    cont_table <- test_result$contingency_table
 
-    # 2. Zeige Zusammenfassung
-    summary_table <- create_detailed_test_summary()
+    # Berechne standardisierte Residuen
+    chi_test <- chisq.test(cont_table)
+    std_residuals <- chi_test$stdres
 
-    # 3. Erstelle und zeige Plots
-    cat("\n=== VISUALISIERUNGEN ===\n")
+    # Identifiziere Zellen mit |standardisierte Residuen| > 2 (signifikant)
+    significant_cells <- which(abs(std_residuals) > 2, arr.ind = TRUE)
 
-    # Plot für alle Gruppen
-    tryCatch(
-        {
-            combined_plot <- plotMedicationGroupsAllComparison_WithStats()
-            print(combined_plot)
+    if (nrow(significant_cells) == 0) {
+        return(list(
+            has_significant_cells = FALSE,
+            message = "Keine einzelnen Zellen zeigen signifikante Abweichungen (|std. Residuen| > 2)"
+        ))
+    }
 
-            cat("Plot erstellt: plotMedicationGroupsAllComparison_WithStats()\n")
-        },
-        error = function(e) {
-            cat("Fehler beim Erstellen des kombinierten Plots:", e$message, "\n")
-        }
+    # Erstelle Ergebnistabelle
+    results_df <- data.frame(
+        Altersgruppe = rownames(cont_table)[significant_cells[, 1]],
+        Medikamentengruppe = colnames(cont_table)[significant_cells[, 2]],
+        Beobachtet = cont_table[significant_cells],
+        Erwartet = round(chi_test$expected[significant_cells], 1),
+        Std_Residuum = round(std_residuals[significant_cells], 3),
+        Interpretation = ifelse(std_residuals[significant_cells] > 2,
+            "Überrepräsentiert", "Unterrepräsentiert"
+        ),
+        stringsAsFactors = FALSE
     )
 
+    # Sortiere nach absoluten standardisierten Residuen (stärkste Effekte zuerst)
+    results_df <- results_df[order(abs(results_df$Std_Residuum), decreasing = TRUE), ]
+
     return(list(
-        test_results = test_results,
-        summary_table = summary_table
+        has_significant_cells = TRUE,
+        significant_combinations = results_df,
+        std_residuals_matrix = std_residuals,
+        interpretation = generate_posthoc_interpretation(results_df)
     ))
 }
 
-# Schnellzugriff-Funktionen
-quick_general_analysis <- function() {
-    test_results <- perform_medication_chisq_tests()
-    if (!is.null(test_results$general)) {
-        plot <- create_contingency_plot(test_results$general)
-        print(plot)
-        return(test_results$general)
+# Funktion zur Interpretation der Post-hoc-Ergebnisse
+generate_posthoc_interpretation <- function(results_df) {
+    interpretations <- character()
+
+    for (i in 1:nrow(results_df)) {
+        row <- results_df[i, ]
+        direction <- ifelse(row$Std_Residuum > 0, "häufiger", "seltener")
+        strength <- case_when(
+            abs(row$Std_Residuum) >= 3 ~ "sehr stark",
+            abs(row$Std_Residuum) >= 2.5 ~ "stark",
+            TRUE ~ "moderat"
+        )
+
+        interpretation <- paste0(
+            "- ", row$Medikamentengruppe, " wird in der Altersgruppe '",
+            row$Altersgruppe, "' ", strength, " ", direction,
+            " verwendet als erwartet (Std. Residuum: ", row$Std_Residuum, ")"
+        )
+        interpretations <- c(interpretations, interpretation)
     }
-    cat("Keine Daten für allgemeine Analyse verfügbar\n")
+
+    return(interpretations)
 }
 
-quick_female_analysis <- function() {
+# Erweiterte Funktion für detaillierte Ergebnis-Tabelle mit Post-hoc-Analyse
+create_detailed_test_summary_with_posthoc <- function() {
     test_results <- perform_medication_chisq_tests()
-    if (!is.null(test_results$female)) {
-        plot <- create_contingency_plot(test_results$female)
-        print(plot)
-        return(test_results$female)
+
+    summary_list <- list()
+    posthoc_results <- list()
+
+    for (group_name in names(test_results)) {
+        result <- test_results[[group_name]]
+        if (!is.null(result)) {
+            # Basis-Zusammenfassung
+            summary_list[[group_name]] <- data.frame(
+                Gruppe = result$test_name,
+                Test = result$test_type,
+                p_Wert = sprintf("%.4f", result$p_value),
+                Signifikanz = ifelse(result$is_significant, "Ja*", "Nein"),
+                Cohens_W = sprintf("%.3f", result$cohens_w),
+                Effektgroesse = result$effect_size_interpretation,
+                n_Patienten = result$n_patients,
+                stringsAsFactors = FALSE
+            )
+
+            # Post-hoc-Analyse
+            posthoc_results[[group_name]] <- perform_posthoc_analysis(result)
+        }
     }
-    cat("Keine Daten für weibliche Patienten verfügbar\n")
-}
 
-quick_male_analysis <- function() {
-    test_results <- perform_medication_chisq_tests()
-    if (!is.null(test_results$male)) {
-        plot <- create_contingency_plot(test_results$male)
-        print(plot)
-        return(test_results$male)
-    }
-    cat("Keine Daten für männliche Patienten verfügbar\n")
-}
+    if (length(summary_list) > 0) {
+        summary_df <- do.call(rbind, summary_list)
+        rownames(summary_df) <- NULL
 
-# Geschlechter-unspezifische Analyse (Fokus auf die allgemeine Patienten)
-run_gender_neutral_analysis <- function() {
-    cat("=== GESCHLECHTER-UNSPEZIFISCHE MEDIKAMENTENANALYSE ===\n\n")
+        cat("\n=== DETAILLIERTE ZUSAMMENFASSUNG DER STATISTISCHEN TESTS ===\n")
+        print(summary_df)
 
-    # Führe Test nur für die allgemeine Patienten durch
-    test_results <- perform_medication_chisq_tests()
+        # Post-hoc-Ergebnisse anzeigen
+        cat("\n=== POST-HOC-ANALYSE: SPEZIFISCHE UNTERSCHIEDE ===\n")
 
-    if (!is.null(test_results$general)) {
-        # Zeige detaillierte Ergebnisse für allgemeine Patienten
-        result <- test_results$general
+        for (group_name in names(posthoc_results)) {
+            posthoc <- posthoc_results[[group_name]]
+            if (!is.null(posthoc)) {
+                cat(paste0("\n--- ", test_results[[group_name]]$test_name, " ---\n"))
 
-        cat("STATISTISCHE ERGEBNISSE (Alle Patienten):\n")
-        cat("==========================================\n")
-        cat(paste("Test-Typ:", result$test_type, "\n"))
-        cat(paste(
-            "p-Wert:", sprintf("%.4f", result$p_value),
-            ifelse(result$is_significant, "(signifikant*)", "(nicht signifikant)"), "\n"
-        ))
-        cat(paste("Cohen's W:", sprintf("%.3f", result$cohens_w), "\n"))
-        cat(paste("Effektgröße:", result$effect_size_interpretation, "\n"))
-        cat(paste("Anzahl Patienten:", result$n_patients, "\n"))
+                if (posthoc$has_significant_cells) {
+                    cat("Signifikante Abweichungen zwischen Altersgruppen und Medikamentengruppen:\n\n")
+                    print(posthoc$significant_combinations)
 
-        cat("\nKONTINGENZTABELLE:\n")
-        cat("==================\n")
-        print(result$contingency_table)
-
-        cat("\nINTERPRETATION:\n")
-        cat("===============\n")
-        if (result$is_significant) {
-            cat("Es besteht ein statistisch signifikanter Zusammenhang zwischen\n")
-            cat("Altersgruppe und Medikamentengruppen-Wahl (p < 0.05).\n")
-            cat("Die Effektgröße ist", tolower(result$effect_size_interpretation), ".\n")
-        } else {
-            cat("Es besteht KEIN statistisch signifikanter Zusammenhang zwischen\n")
-            cat("Altersgruppe und Medikamentengruppen-Wahl (p ≥ 0.05).\n")
-            if (result$cohens_w >= 0.3) {
-                cat(
-                    "Jedoch zeigt die Effektgröße (Cohen's W =", sprintf("%.3f", result$cohens_w),
-                    ") einen", tolower(result$effect_size_interpretation), ",\n"
-                )
-                cat("der klinisch relevant sein könnte.\n")
+                    cat("\nInterpretation:\n")
+                    for (interpretation in posthoc$interpretation) {
+                        cat(interpretation, "\n")
+                    }
+                } else {
+                    cat(posthoc$message, "\n")
+                }
             }
         }
 
-        cat("\nVISUALISIERUNG:\n")
-        cat("===============\n")
-        # Erstelle und zeige Plot
-        plot <- create_contingency_plot(result)
-        print(plot)
+        # Allgemeine Interpretation
+        cat("\n=== GESAMTINTERPRETATION ===\n")
+        cat("Signifikante Haupteffekte (p < 0.05):\n")
+        significant_results <- summary_df[summary_df$Signifikanz == "Ja*", ]
+        if (nrow(significant_results) > 0) {
+            for (i in 1:nrow(significant_results)) {
+                cat(paste0(
+                    "- ", significant_results$Gruppe[i],
+                    " (p = ", significant_results$p_Wert[i],
+                    ", ", significant_results$Effektgroesse[i], ")\n"
+                ))
+            }
 
-        return(result)
+            cat("\nHinweis: Die Post-hoc-Analyse oben zeigt, welche spezifischen\n")
+            cat("Altersgruppen-Medikamentengruppen-Kombinationen für diese\n")
+            cat("signifikanten Haupteffekte verantwortlich sind.\n")
+        } else {
+            cat("- Keine statistisch signifikanten Unterschiede gefunden\n")
+        }
+
+        return(list(
+            summary_table = summary_df,
+            posthoc_results = posthoc_results
+        ))
     } else {
-        cat("Keine Daten für geschlechter-unspezifische Analyse verfügbar\n")
+        cat("Keine Testergebnisse verfügbar\n")
         return(NULL)
     }
 }
 
+# Funktion für visualisierte Post-hoc-Ergebnisse (Heatmap der standardisierten Residuen)
+create_posthoc_heatmap <- function(test_result) {
+    if (is.null(test_result) || !test_result$is_significant) {
+        return(ggplot() +
+            labs(title = paste("Keine signifikanten Ergebnisse für:", test_result$test_name)) +
+            theme_void())
+    }
+
+    posthoc <- perform_posthoc_analysis(test_result)
+    if (is.null(posthoc) || !posthoc$has_significant_cells) {
+        return(ggplot() +
+            labs(title = paste("Keine signifikanten Zell-Abweichungen für:", test_result$test_name)) +
+            theme_void())
+    }
+
+    # Konvertiere Matrix zu Data Frame für ggplot
+    std_res_df <- as.data.frame(as.table(posthoc$std_residuals_matrix))
+    names(std_res_df) <- c("Altersgruppe", "Medikamentengruppe", "Std_Residuum")
+
+    # Erstelle Heatmap
+    heatmap_plot <- ggplot(std_res_df, aes(x = Medikamentengruppe, y = Altersgruppe, fill = Std_Residuum)) +
+        geom_tile(color = "white", size = 0.5) +
+        scale_fill_gradient2(
+            low = "blue", mid = "white", high = "red",
+            midpoint = 0,
+            name = "Std.\nResiduum",
+            breaks = c(-3, -2, 0, 2, 3),
+            labels = c("-3", "-2", "0", "2", "3")
+        ) +
+        geom_text(aes(label = round(Std_Residuum, 2)),
+            color = ifelse(abs(std_res_df$Std_Residuum) > 1.5, "white", "black"),
+            size = 3
+        ) +
+        labs(
+            title = paste("Post-hoc-Analyse:", test_result$test_name),
+            subtitle = "Standardisierte Residuen (|Wert| > 2 = signifikant)",
+            x = "Medikamentengruppe",
+            y = "Altersgruppe"
+        ) +
+        theme_minimal() +
+        theme(
+            axis.text.x = element_text(angle = 45, hjust = 1),
+            plot.title = element_text(hjust = 0.5),
+            plot.subtitle = element_text(hjust = 0.5)
+        ) +
+        # Markiere signifikante Zellen
+        geom_tile(
+            data = subset(std_res_df, abs(Std_Residuum) > 2),
+            aes(x = Medikamentengruppe, y = Altersgruppe),
+            color = "black", size = 2, fill = NA
+        )
+
+    return(heatmap_plot)
+}
+
+# Erweiterte Hauptfunktion mit Post-hoc-Analyse
+run_complete_medication_analysis_with_posthoc <- function() {
+    cat("=== VOLLSTÄNDIGE MEDIKAMENTENANALYSE MIT POST-HOC-TESTS ===\n\n")
+
+    # 1. Führe alle Tests durch
+    test_results <- perform_medication_chisq_tests()
+
+    # 2. Zeige detaillierte Zusammenfassung mit Post-hoc
+    detailed_results <- create_detailed_test_summary_with_posthoc()
+
+    # 3. Erstelle Visualisierungen
+    cat("\n=== VISUALISIERUNGEN ===\n")
+
+    # Ursprüngliche Plots
+    tryCatch(
+        {
+            combined_plot <- plotMedicationGroupsAllComparison_WithStats()
+            print(combined_plot)
+            cat("Standard-Plots erstellt\n")
+        },
+        error = function(e) {
+            cat("Fehler beim Erstellen der Standard-Plots:", e$message, "\n")
+        }
+    )
+
+    # Post-hoc Heatmaps
+    cat("\n=== POST-HOC HEATMAPS ===\n")
+    for (group_name in names(test_results)) {
+        result <- test_results[[group_name]]
+        if (!is.null(result) && result$is_significant) {
+            tryCatch(
+                {
+                    heatmap <- create_posthoc_heatmap(result)
+                    print(heatmap)
+                    cat(paste("Heatmap erstellt für:", result$test_name, "\n"))
+                },
+                error = function(e) {
+                    cat("Fehler beim Erstellen der Heatmap für", result$test_name, ":", e$message, "\n")
+                }
+            )
+        }
+    }
+
+    return(list(
+        test_results = test_results,
+        detailed_results = detailed_results
+    ))
+}
+
+# Vereinfachte Funktion für schnelle Post-hoc-Analyse einer spezifischen Gruppe
+quick_posthoc_analysis <- function(group = "general") {
+    test_results <- perform_medication_chisq_tests()
+
+    if (group %in% names(test_results) && !is.null(test_results[[group]])) {
+        result <- test_results[[group]]
+
+        cat(paste("=== POST-HOC-ANALYSE:", result$test_name, "===\n"))
+        cat(paste(
+            "Haupttest p-Wert:", sprintf("%.4f", result$p_value),
+            ifelse(result$is_significant, "(signifikant)", "(nicht signifikant)"), "\n\n"
+        ))
+
+        if (result$is_significant) {
+            posthoc <- perform_posthoc_analysis(result)
+            if (!is.null(posthoc) && posthoc$has_significant_cells) {
+                cat("Spezifische signifikante Unterschiede:\n")
+                print(posthoc$significant_combinations)
+
+                cat("\nInterpretation:\n")
+                for (interpretation in posthoc$interpretation) {
+                    cat(interpretation, "\n")
+                }
+
+                # Zeige Heatmap
+                heatmap <- create_posthoc_heatmap(result)
+                print(heatmap)
+
+                return(posthoc)
+            } else {
+                cat("Obwohl der Haupttest signifikant ist, zeigen keine einzelnen\n")
+                cat("Zellen signifikante Abweichungen (|std. Residuen| > 2).\n")
+            }
+        } else {
+            cat("Da der Haupttest nicht signifikant ist, wird keine Post-hoc-Analyse durchgeführt.\n")
+        }
+    } else {
+        cat("Keine Daten für Gruppe:", group, "\n")
+        cat("Verfügbare Gruppen:", paste(names(test_results), collapse = ", "), "\n")
+    }
+
+    return(NULL)
+}
+
 # Beispielaufrufe:
-run_complete_medication_analysis()
+# Grundlegende Analysen (ohne Post-hoc):
+# run_complete_medication_analysis()
+
+# NEUE: Erweiterte Analysen mit Post-hoc-Tests:
+run_complete_medication_analysis_with_posthoc() # Vollständige Analyse mit Post-hoc
+# quick_posthoc_analysis("general")                # Post-hoc für alle Patienten
+# quick_posthoc_analysis("female")                 # Post-hoc für weibliche Patienten
+# quick_posthoc_analysis("male")                   # Post-hoc für männliche Patienten
+# create_detailed_test_summary_with_posthoc()      # Detaillierte Tabelle mit Post-hoc
+
+# Andere verfügbare Funktionen:
 # plotMedicationGroupsAllComparison_WithStats()
-# run_gender_neutral_analysis()  # Fokus auf geschlechter-unspezifische Analyse
-# quick_general_analysis()       # Schnelle geschlechter-unspezifische Analyse
+# run_gender_neutral_analysis()                    # Fokus auf geschlechter-unspezifische Analyse
+# quick_general_analysis()                         # Schnelle geschlechter-unspezifische Analyse
 # quick_female_analysis()
 # quick_male_analysis()
 # create_detailed_test_summary()
